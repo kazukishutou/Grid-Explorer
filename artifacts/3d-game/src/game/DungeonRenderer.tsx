@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { DungeonMap, PlayerState, isWall, DIR_VECTORS, Direction } from "./dungeon";
+import { makeWallTexture, makeFloorTexture, makeCeilingTexture } from "./textures";
 
 interface Props {
   dungeon: DungeonMap;
@@ -31,9 +32,13 @@ const DIR_ANGLES = [
 function buildScene(dungeon: DungeonMap): THREE.Group {
   const group = new THREE.Group();
 
-  const wallMat = new THREE.MeshLambertMaterial({ color: 0x4a3f35 });
-  const floorMat = new THREE.MeshLambertMaterial({ color: 0x2d2520 });
-  const ceilMat = new THREE.MeshLambertMaterial({ color: 0x1a1512 });
+  const wallTex = makeWallTexture();
+  const floorTex = makeFloorTexture();
+  const ceilTex = makeCeilingTexture();
+
+  const wallMat = new THREE.MeshLambertMaterial({ map: wallTex, color: 0xaaaacc });
+  const floorMat = new THREE.MeshLambertMaterial({ map: floorTex, color: 0x8888bb });
+  const ceilMat = new THREE.MeshLambertMaterial({ map: ceilTex, color: 0x7777aa });
 
   const wallGeo = new THREE.BoxGeometry(CELL_SIZE, WALL_HEIGHT, CELL_SIZE);
   const floorGeo = new THREE.BoxGeometry(CELL_SIZE, 0.1, CELL_SIZE);
@@ -63,7 +68,7 @@ function buildScene(dungeon: DungeonMap): THREE.Group {
 }
 
 function addEdgeHighlights(group: THREE.Group, dungeon: DungeonMap) {
-  const edgeMat = new THREE.MeshLambertMaterial({ color: 0x6b5a4e });
+  const edgeMat = new THREE.MeshLambertMaterial({ color: 0x003355 });
 
   for (let y = 0; y < dungeon.height; y++) {
     for (let x = 0; x < dungeon.width; x++) {
@@ -126,17 +131,20 @@ export default function DungeonRenderer({ dungeon, player }: Props) {
     rendererRef.current = renderer;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0a0705);
-    scene.fog = new THREE.Fog(0x0a0705, 8, 34);
+    scene.background = new THREE.Color(0x05050f);
+    scene.fog = new THREE.Fog(0x05050f, 8, 34);
     sceneRef.current = scene;
 
     const camera = new THREE.PerspectiveCamera(70, w / h, 0.1, 100);
     cameraRef.current = camera;
 
-    const ambient = new THREE.AmbientLight(0x332211, 0.4);
+    const ambient = new THREE.AmbientLight(0x1a0a3a, 0.8);
     scene.add(ambient);
 
-    const torchLight = new THREE.PointLight(0xff8833, 3.5, 14);
+    const cyanFill = new THREE.HemisphereLight(0x00f0ff, 0xa020f0, 0.35);
+    scene.add(cyanFill);
+
+    const torchLight = new THREE.PointLight(0x00e0ff, 4.0, 14);
     camera.add(torchLight);
     torchLight.position.set(0, -0.2, 0);
     scene.add(camera);
@@ -191,8 +199,9 @@ export default function DungeonRenderer({ dungeon, player }: Props) {
         if (t >= 1) isAnimating = false;
       }
 
-      const flicker = 1 + (Math.sin(performance.now() * 0.003) * 0.12);
-      torchLight.intensity = 2.5 * flicker;
+      const now = performance.now();
+      const flicker = 1 + Math.sin(now * 0.005) * 0.1 + Math.sin(now * 0.017) * 0.05;
+      torchLight.intensity = 4.0 * flicker;
 
       renderer.render(scene, camera);
     };
