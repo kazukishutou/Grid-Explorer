@@ -127,7 +127,7 @@ export default function DungeonRenderer({ dungeon, player }: Props) {
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0a0705);
-    scene.fog = new THREE.Fog(0x0a0705, 6, 24);
+    scene.fog = new THREE.Fog(0x0a0705, 8, 34);
     sceneRef.current = scene;
 
     const camera = new THREE.PerspectiveCamera(70, w / h, 0.1, 100);
@@ -136,7 +136,7 @@ export default function DungeonRenderer({ dungeon, player }: Props) {
     const ambient = new THREE.AmbientLight(0x332211, 0.4);
     scene.add(ambient);
 
-    const torchLight = new THREE.PointLight(0xff8833, 2.5, 8);
+    const torchLight = new THREE.PointLight(0xff8833, 3.5, 14);
     camera.add(torchLight);
     torchLight.position.set(0, -0.2, 0);
     scene.add(camera);
