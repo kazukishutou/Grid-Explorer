@@ -9,11 +9,17 @@ type GamePhase = "start" | "playing";
 export default function DungeonGame() {
   const [phase, setPhase] = useState<GamePhase>("start");
   const [dungeon, setDungeon] = useState<DungeonMap | null>(null);
-  const { player, visited, initPlayer, handleTurnLeft, handleTurnRight, handleMoveForward, handleMoveBackward } =
+  const { player, visited, lastEvent, clearEvent, initPlayer, handleTurnLeft, handleTurnRight, handleMoveForward, handleMoveBackward } =
     usePlayerState(dungeon);
 
   const [minimapOpen, setMinimapOpen] = useState(true);
   const lastKeyTime = useRef<number>(0);
+
+  useEffect(() => {
+    if (!lastEvent) return;
+    const timer = setTimeout(clearEvent, 3000);
+    return () => clearTimeout(timer);
+  }, [lastEvent, clearEvent]);
 
   const startGame = useCallback(() => {
     const d = generateDungeon(21, 21);
@@ -114,6 +120,14 @@ export default function DungeonGame() {
               <Minimap dungeon={dungeon} player={player} visited={visited} />
             </div>
           )}
+
+          <div style={styles.eventLog}>
+            {lastEvent && (
+              <div style={styles.eventMessage}>
+                ▶ {lastEvent.message}
+              </div>
+            )}
+          </div>
 
           <div style={styles.mobileControls}>
             <div style={styles.mobileRow}>
@@ -285,6 +299,30 @@ const styles: Record<string, React.CSSProperties> = {
     height: 180,
     overflow: "hidden",
     boxShadow: "0 0 12px rgba(0,207,255,0.12)",
+  },
+  eventLog: {
+    position: "absolute",
+    bottom: 140,
+    left: "50%",
+    transform: "translateX(-50%)",
+    pointerEvents: "none",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 6,
+  },
+  eventMessage: {
+    background: "rgba(0, 10, 20, 0.85)",
+    border: "1px solid #00cfff66",
+    color: "#00cfff",
+    fontFamily: "'Courier New', monospace",
+    fontSize: 14,
+    letterSpacing: 1,
+    padding: "8px 20px",
+    borderRadius: 2,
+    whiteSpace: "nowrap",
+    boxShadow: "0 0 16px rgba(0,207,255,0.2)",
+    textShadow: "0 0 8px rgba(0,207,255,0.6)",
   },
   mobileControls: {
     position: "absolute",
