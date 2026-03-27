@@ -9,7 +9,7 @@ type GamePhase = "start" | "playing";
 export default function DungeonGame() {
   const [phase, setPhase] = useState<GamePhase>("start");
   const [dungeon, setDungeon] = useState<DungeonMap | null>(null);
-  const { player, initPlayer, handleTurnLeft, handleTurnRight, handleMoveForward, handleMoveBackward } =
+  const { player, visited, initPlayer, handleTurnLeft, handleTurnRight, handleMoveForward, handleMoveBackward } =
     usePlayerState(dungeon);
 
   const [minimapOpen, setMinimapOpen] = useState(true);
@@ -111,7 +111,7 @@ export default function DungeonGame() {
 
           {minimapOpen && (
             <div style={styles.minimap}>
-              <Minimap dungeon={dungeon} player={player} />
+              <Minimap dungeon={dungeon} player={player} visited={visited} />
             </div>
           )}
 
@@ -275,15 +275,16 @@ const styles: Record<string, React.CSSProperties> = {
   },
   minimap: {
     position: "absolute",
-    bottom: 100,
+    top: 56,
     right: 16,
-    background: "rgba(10,7,5,0.85)",
-    border: "1px solid #4a3a28",
+    background: "rgba(0,5,15,0.88)",
+    border: "1px solid #00cfff44",
     borderRadius: 3,
-    padding: 6,
-    maxWidth: 160,
-    maxHeight: 160,
+    padding: 4,
+    width: 180,
+    height: 180,
     overflow: "hidden",
+    boxShadow: "0 0 12px rgba(0,207,255,0.12)",
   },
   mobileControls: {
     position: "absolute",
