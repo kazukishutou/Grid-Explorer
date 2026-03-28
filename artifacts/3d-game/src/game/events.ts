@@ -61,18 +61,13 @@ function pickRandom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-// ─── TEST MODE ────────────────────────────────────────────────
-// true  → 全員ランダム投票・全員weight=1・リーダー/反発無効
-// false → 通常ロジック（personality固定・leader weight=2・反発あり）
-const TEST_MODE = true;
-// ─────────────────────────────────────────────────────────────
-
 export function triggerEvent(type: "resource" | "enemy"): GameEvent {
   return { type, message: EVENT_MESSAGES[type] };
 }
 
 // Returns a sequence of {message, delay} to display after an enemy encounter.
-export function getDebateSequence(): Array<{ message: string; delay: number }> {
+// testMode=true → 全員ランダム投票・全員weight=1・リーダー/反発無効・DEBUG表示
+export function getDebateSequence(testMode: boolean): Array<{ message: string; delay: number }> {
   const votes: Record<Vote, number> = { fight: 0, escape: 0, wait: 0 };
 
   let leaderVote: Vote | null = null;
@@ -89,7 +84,7 @@ export function getDebateSequence(): Array<{ message: string; delay: number }> {
     let weight: number;
     let rebelled = false;
 
-    if (TEST_MODE) {
+    if (testMode) {
       // テストモード：全員ランダム・全員weight=1・リーダー/反発無効
       vote = pickRandom(VOTE_OPTIONS);
       weight = 1;
@@ -117,12 +112,12 @@ export function getDebateSequence(): Array<{ message: string; delay: number }> {
     if (member.isLeader) leaderVote = vote;
 
     // 表示テキスト
-    const label = TEST_MODE
+    const label = testMode
       ? member.name
       : member.isLeader ? `${member.name}（リーダー）` : member.name;
 
     let messageText: string;
-    if (TEST_MODE || member.personality === "chaotic") {
+    if (testMode || member.personality === "chaotic") {
       // テストモード or カイ → 投票内容を直接表示
       messageText = `${label}：「（DEBUG）${vote} を選択」`;
     } else {
@@ -131,7 +126,7 @@ export function getDebateSequence(): Array<{ message: string; delay: number }> {
       messageText = `${label}：「${opinion}」${suffix}`;
     }
 
-    console.log({ name: member.name, vote, weight, rebelled: TEST_MODE ? "N/A(test)" : rebelled });
+    console.log({ name: member.name, vote, weight, rebelled: testMode ? "N/A(test)" : rebelled });
 
     return {
       message: messageText,

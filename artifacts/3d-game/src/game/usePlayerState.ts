@@ -26,7 +26,7 @@ function markVisited(visited: boolean[][], x: number, y: number): boolean[][] {
 // How long after the last debate message to release the event lock
 const POST_EVENT_UNLOCK_MS = 1200;
 
-export function usePlayerState(dungeon: DungeonMap | null) {
+export function usePlayerState(dungeon: DungeonMap | null, testMode: boolean) {
   const [player, setPlayer] = useState<PlayerState | null>(null);
   const [visited, setVisited] = useState<boolean[][]>([]);
   const [eventLog, setEventLog] = useState<string[]>([]);
@@ -72,7 +72,7 @@ export function usePlayerState(dungeon: DungeonMap | null) {
         addLog(event.message);
 
         if (event.type === "enemy") {
-          const sequence = getDebateSequence();
+          const sequence = getDebateSequence(testMode);
           sequence.forEach(({ message, delay }) => {
             const id = setTimeout(() => addLog(message), delay);
             pendingTimers.current.push(id);

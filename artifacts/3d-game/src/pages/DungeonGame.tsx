@@ -9,8 +9,9 @@ type GamePhase = "start" | "playing";
 export default function DungeonGame() {
   const [phase, setPhase] = useState<GamePhase>("start");
   const [dungeon, setDungeon] = useState<DungeonMap | null>(null);
+  const [testMode, setTestMode] = useState(false);
   const { player, visited, eventLog, initPlayer, handleTurnLeft, handleTurnRight, handleMoveForward, handleMoveBackward } =
-    usePlayerState(dungeon);
+    usePlayerState(dungeon, testMode);
 
   const [minimapOpen, setMinimapOpen] = useState(true);
   const lastKeyTime = useRef<number>(0);
@@ -109,6 +110,15 @@ export default function DungeonGame() {
               </div>
             </div>
             <div style={styles.hudRight}>
+              <button
+                style={{
+                  ...styles.testModeBtn,
+                  ...(testMode ? styles.testModeBtnOn : {}),
+                }}
+                onClick={() => setTestMode((v) => !v)}
+              >
+                TEST MODE: {testMode ? "ON" : "OFF"}
+              </button>
               <button style={styles.restartBtn} onClick={startGame}>
                 Restart
               </button>
@@ -289,6 +299,25 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 12,
     borderRadius: 2,
     letterSpacing: 1,
+  },
+  testModeBtn: {
+    display: "block",
+    marginBottom: 6,
+    background: "rgba(10,10,10,0.8)",
+    border: "1px solid #444",
+    color: "#666",
+    padding: "5px 10px",
+    cursor: "pointer",
+    fontFamily: "'Courier New', monospace",
+    fontSize: 11,
+    borderRadius: 2,
+    letterSpacing: 1,
+  },
+  testModeBtnOn: {
+    border: "1px solid #ff4444",
+    color: "#ff4444",
+    background: "rgba(40,0,0,0.85)",
+    boxShadow: "0 0 8px rgba(255,68,68,0.3)",
   },
   minimap: {
     position: "absolute",
