@@ -10,7 +10,7 @@ const EVENT_MESSAGES: Record<"resource" | "enemy", string> = {
   enemy: "敵と遭遇した！",
 };
 
-type Personality = "aggressive" | "cautious" | "neutral";
+type Personality = "aggressive" | "cautious" | "neutral" | "chaotic";
 type Vote = "fight" | "escape" | "wait";
 
 interface TeamMember {
@@ -24,13 +24,15 @@ const TEAM: TeamMember[] = [
   { name: "アレス", personality: "aggressive", isLeader: true,  dislikesLeader: false },
   { name: "セイラ", personality: "cautious",   isLeader: false, dislikesLeader: true  },
   { name: "レン",   personality: "neutral",    isLeader: false, dislikesLeader: false },
+  { name: "カイ",   personality: "chaotic",    isLeader: false, dislikesLeader: false },
 ];
 
-// Personality → the vote it always casts ("random" for neutral)
+// Personality → the vote it always casts ("random" for neutral/chaotic)
 const PERSONALITY_VOTE: Record<Personality, Vote | "random"> = {
   aggressive: "fight",
   cautious:   "escape",
   neutral:    "random",
+  chaotic:    "random",
 };
 
 const VOTE_OPTIONS: Vote[] = ["fight", "escape", "wait"];
@@ -97,15 +99,23 @@ export function getDebateSequence(): Array<{ message: string; delay: number }> {
     votes[vote] += weight;
     if (member.isLeader) leaderVote = vote;
 
-    // Step 4: pick display text matching the actual vote cast
-    const opinion = pickRandom(VOTE_OPINIONS[vote]);
+    // Step 4: build display text
     const label = member.isLeader ? `${member.name}（リーダー）` : member.name;
-    const suffix = rebelled ? `　${pickRandom(REBELLION_LINES)}` : "";
+    let messageText: string;
+
+    if (member.personality === "chaotic") {
+      // カイは常に投票内容を直接表示（デバッグ枠）
+      messageText = `${label}：「（DEBUG）${vote} を選択」`;
+    } else {
+      const opinion = pickRandom(VOTE_OPINIONS[vote]);
+      const suffix = rebelled ? `　${pickRandom(REBELLION_LINES)}` : "";
+      messageText = `${label}：「${opinion}」${suffix}`;
+    }
 
     console.log({ name: member.name, isLeader: member.isLeader, dislikesLeader: member.dislikesLeader, vote, weight, rebelled });
 
     return {
-      message: `${label}：「${opinion}」${suffix}`,
+      message: messageText,
       delay: 800 + i * 700,
     };
   });
