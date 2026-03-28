@@ -212,7 +212,7 @@ export default function DungeonRenderer({ dungeon, player }: Props) {
     const sd = dungeon.startDir;
     const px = dungeon.startX * CELL_SIZE + DIR_BACK_X[sd] * CAM_BACK;
     const pz = dungeon.startY * CELL_SIZE + DIR_BACK_Z[sd] * CAM_BACK;
-    camera.position.set(px, WALL_HEIGHT * 0.45, pz);
+    camera.position.set(px, WALL_HEIGHT * 0.5, pz);
     camera.rotation.y = DIR_ANGLES[sd];
     lastPlayerKey = `${dungeon.startX},${dungeon.startY},${sd}`;
     stepFromX = px; stepFromZ = pz;
