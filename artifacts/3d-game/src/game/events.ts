@@ -18,6 +18,12 @@ const DEBATE_OPINIONS = [
 
 const DEBATE_RESULTS = ["戦闘開始", "逃走", "様子見"];
 
+const OUTCOME_MESSAGES: Record<string, string[]> = {
+  "戦闘開始": ["戦闘に突入した！"],
+  "逃走":     ["なんとか逃げ切った！", "ギリギリで離脱した…", "逃走に成功した。"],
+  "様子見":   ["敵の動きを観察している…", "じっと息を潜めた。", "敵はやがて去っていった。"],
+};
+
 export function triggerEvent(type: "resource" | "enemy"): GameEvent {
   return { type, message: EVENT_MESSAGES[type] };
 }
@@ -29,8 +35,15 @@ export function getDebateSequence(): Array<{ message: string; delay: number }> {
     message: msg,
     delay: 800 + i * 700,
   }));
+
   const result = DEBATE_RESULTS[Math.floor(Math.random() * DEBATE_RESULTS.length)];
-  sequence.push({ message: `→ 結論：${result}`, delay: 800 + 3 * 700 });
+  const conclusionDelay = 800 + 3 * 700;
+  sequence.push({ message: `→ 結論：${result}`, delay: conclusionDelay });
+
+  const outcomes = OUTCOME_MESSAGES[result];
+  const outcome = outcomes[Math.floor(Math.random() * outcomes.length)];
+  sequence.push({ message: outcome, delay: conclusionDelay + 900 });
+
   return sequence;
 }
 
