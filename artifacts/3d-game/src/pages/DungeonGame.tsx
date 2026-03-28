@@ -13,13 +13,14 @@ interface CharStat {
   stress: number;
   morale: number;
   selected: boolean;
+  isLeader: boolean;
 }
 
 const INITIAL_CHAR_STATS: CharStat[] = [
-  { name: "アレス", stress: 0, morale: 0, selected: true },
-  { name: "セイラ", stress: 0, morale: 0, selected: true },
-  { name: "レン",   stress: 0, morale: 0, selected: true },
-  { name: "カイ",   stress: 0, morale: 0, selected: true },
+  { name: "アレス", stress: 0, morale: 0, selected: true,  isLeader: true  },
+  { name: "セイラ", stress: 0, morale: 0, selected: true,  isLeader: false },
+  { name: "レン",   stress: 0, morale: 0, selected: true,  isLeader: false },
+  { name: "カイ",   stress: 0, morale: 0, selected: true,  isLeader: false },
 ];
 
 export default function DungeonGame() {
@@ -30,10 +31,13 @@ export default function DungeonGame() {
   const [appMode, setAppMode] = useState<AppMode>("commune");
   const [charStats, setCharStats] = useState<CharStat[]>(INITIAL_CHAR_STATS);
 
-  // Derived: selected team members mapped to their full TeamMember definition
+  // Derived: selected team members with isLeader driven by charStats (overrides static TEAM)
   const selectedTeam = charStats
     .filter((c) => c.selected)
-    .map((c) => TEAM.find((t) => t.name === c.name)!)
+    .map((c) => {
+      const base = TEAM.find((t) => t.name === c.name)!;
+      return { ...base, isLeader: c.isLeader };
+    })
     .filter(Boolean) as typeof TEAM;
 
   const { player, visited, eventLog, food, scrap, stepCount, isRunEnded, characterChanges, hasReturnFlag, initPlayer, handleTurnLeft, handleTurnRight, handleMoveForward, handleMoveBackward } =
@@ -76,11 +80,27 @@ export default function DungeonGame() {
       const target = prev.find((c) => c.name === name);
       if (!target) return prev;
       const numSelected = prev.filter((c) => c.selected).length;
-      // 選択解除は常に可能（ただし1人以下にはできない）
       if (target.selected && numSelected <= 1) return prev;
-      // 選択追加は最大4人まで（実質制限なし）
       if (!target.selected && numSelected >= 4) return prev;
-      return prev.map((c) => c.name === name ? { ...c, selected: !c.selected } : c);
+
+      let updated = prev.map((c) => c.name === name ? { ...c, selected: !c.selected } : c);
+
+      // リーダーが外れた場合、選択中の先頭メンバーに自動移譲
+      if (target.selected && target.isLeader) {
+        const firstSelected = updated.find((c) => c.selected);
+        if (firstSelected) {
+          updated = updated.map((c) => ({ ...c, isLeader: c.name === firstSelected.name }));
+        }
+      }
+      return updated;
+    });
+  }, []);
+
+  const setLeader = useCallback((name: string) => {
+    setCharStats((prev) => {
+      const target = prev.find((c) => c.name === name);
+      if (!target || !target.selected) return prev;
+      return prev.map((c) => ({ ...c, isLeader: c.name === name }));
     });
   }, []);
 
@@ -140,6 +160,7 @@ export default function DungeonGame() {
                 style={{
                   ...styles.charCard,
                   ...(c.selected ? styles.charCardSelected : styles.charCardUnselected),
+                  ...(c.isLeader && c.selected ? styles.charCardLeader : {}),
                 }}
               >
                 <div style={styles.charCardLeft}>
@@ -153,15 +174,29 @@ export default function DungeonGame() {
                     color: c.selected ? "#a8ccd8" : "#445566",
                   }}>{c.name}</span>
                 </div>
-                <div style={styles.charCardStats}>
-                  <span style={{
-                    ...styles.charCardStress,
-                    opacity: c.selected ? 1 : 0.35,
-                  }}>ST　{c.stress}</span>
-                  <span style={{
-                    ...styles.charCardMorale,
-                    opacity: c.selected ? 1 : 0.35,
-                  }}>MO　{c.morale}</span>
+                <div style={styles.charCardRight}>
+                  {c.selected && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setLeader(c.name); }}
+                      title="リーダーに指定"
+                      style={{
+                        ...styles.leaderBtn,
+                        ...(c.isLeader ? styles.leaderBtnActive : styles.leaderBtnInactive),
+                      }}
+                    >
+                      ★
+                    </button>
+                  )}
+                  <div style={styles.charCardStats}>
+                    <span style={{
+                      ...styles.charCardStress,
+                      opacity: c.selected ? 1 : 0.35,
+                    }}>ST　{c.stress}</span>
+                    <span style={{
+                      ...styles.charCardMorale,
+                      opacity: c.selected ? 1 : 0.35,
+                    }}>MO　{c.morale}</span>
+                  </div>
                 </div>
               </div>
             ))}
@@ -174,6 +209,16 @@ export default function DungeonGame() {
             </span>
             <span style={styles.selectionCount}>{selectedNames.length} / 4</span>
           </div>
+          {(() => {
+            const leader = charStats.find((c) => c.selected && c.isLeader);
+            return leader ? (
+              <div style={styles.leaderSummary}>
+                <span style={styles.leaderSummaryIcon}>★</span>
+                <span style={styles.leaderSummaryName}>{leader.name}</span>
+                <span style={styles.leaderSummaryLabel}>がリーダー</span>
+              </div>
+            ) : null;
+          })()}
           <button
             style={{
               ...styles.communeExploreBtn,
@@ -680,10 +725,62 @@ const styles: Record<string, React.CSSProperties> = {
     border: "1px solid #111c24",
     background: "#090e13",
   },
+  charCardLeader: {
+    border: "1px solid #9a7a20",
+    background: "#131008",
+    boxShadow: "inset 0 0 12px rgba(180,140,30,0.08)",
+  },
   charCardLeft: {
     display: "flex",
     alignItems: "center",
     gap: 10,
+  },
+  charCardRight: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+  },
+  leaderBtn: {
+    background: "none",
+    border: "none",
+    cursor: "pointer",
+    fontSize: 16,
+    padding: "0 2px",
+    lineHeight: 1,
+    fontFamily: "inherit",
+    transition: "opacity 0.15s",
+  },
+  leaderBtnActive: {
+    color: "#e8b830",
+    textShadow: "0 0 8px rgba(232,184,48,0.7)",
+    opacity: 1,
+  },
+  leaderBtnInactive: {
+    color: "#2a4a5a",
+    opacity: 0.6,
+  },
+  leaderSummary: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    fontSize: 11,
+    letterSpacing: 1,
+    marginBottom: 10,
+    paddingLeft: 2,
+  },
+  leaderSummaryIcon: {
+    color: "#e8b830",
+    fontSize: 12,
+  },
+  leaderSummaryName: {
+    color: "#c8a040",
+    fontWeight: 700,
+    letterSpacing: 2,
+    fontSize: 12,
+  },
+  leaderSummaryLabel: {
+    color: "#6a5a30",
+    letterSpacing: 1,
   },
   charSelectDot: {
     display: "inline-block",
