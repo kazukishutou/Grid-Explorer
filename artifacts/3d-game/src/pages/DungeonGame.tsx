@@ -9,17 +9,17 @@ type GamePhase = "start" | "playing";
 export default function DungeonGame() {
   const [phase, setPhase] = useState<GamePhase>("start");
   const [dungeon, setDungeon] = useState<DungeonMap | null>(null);
-  const { player, visited, lastEvent, clearEvent, initPlayer, handleTurnLeft, handleTurnRight, handleMoveForward, handleMoveBackward } =
+  const { player, visited, eventLog, initPlayer, handleTurnLeft, handleTurnRight, handleMoveForward, handleMoveBackward } =
     usePlayerState(dungeon);
 
   const [minimapOpen, setMinimapOpen] = useState(true);
   const lastKeyTime = useRef<number>(0);
+  const logEndRef = useRef<HTMLDivElement>(null);
 
+  // Auto-scroll log to bottom whenever a new message arrives
   useEffect(() => {
-    if (!lastEvent) return;
-    const timer = setTimeout(clearEvent, 3000);
-    return () => clearTimeout(timer);
-  }, [lastEvent, clearEvent]);
+    logEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [eventLog]);
 
   const startGame = useCallback(() => {
     const d = generateDungeon(21, 21);
@@ -121,13 +121,16 @@ export default function DungeonGame() {
             </div>
           )}
 
-          <div style={styles.eventLog}>
-            {lastEvent && (
-              <div style={styles.eventMessage}>
-                ▶ {lastEvent.message}
-              </div>
-            )}
-          </div>
+          {eventLog.length > 0 && (
+            <div style={styles.eventLog}>
+              {eventLog.map((msg, i) => (
+                <div key={i} style={styles.eventMessage}>
+                  ▶ {msg}
+                </div>
+              ))}
+              <div ref={logEndRef} />
+            </div>
+          )}
 
           <div style={styles.mobileControls}>
             <div style={styles.mobileRow}>
@@ -302,27 +305,30 @@ const styles: Record<string, React.CSSProperties> = {
   },
   eventLog: {
     position: "absolute",
-    bottom: 140,
-    left: "50%",
-    transform: "translateX(-50%)",
-    pointerEvents: "none",
+    bottom: 148,
+    left: 16,
+    width: 300,
+    maxHeight: 200,
+    overflowY: "auto",
     display: "flex",
     flexDirection: "column",
-    alignItems: "center",
-    gap: 6,
+    gap: 4,
+    pointerEvents: "none",
+    // Hide scrollbar visually but keep it functional
+    scrollbarWidth: "none",
   },
   eventMessage: {
     background: "rgba(0, 10, 20, 0.85)",
-    border: "1px solid #00cfff66",
+    border: "1px solid #00cfff44",
     color: "#00cfff",
     fontFamily: "'Courier New', monospace",
-    fontSize: 14,
+    fontSize: 13,
     letterSpacing: 1,
-    padding: "8px 20px",
+    padding: "6px 14px",
     borderRadius: 2,
     whiteSpace: "nowrap",
-    boxShadow: "0 0 16px rgba(0,207,255,0.2)",
-    textShadow: "0 0 8px rgba(0,207,255,0.6)",
+    boxShadow: "0 0 10px rgba(0,207,255,0.15)",
+    textShadow: "0 0 8px rgba(0,207,255,0.5)",
   },
   mobileControls: {
     position: "absolute",

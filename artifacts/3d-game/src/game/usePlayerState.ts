@@ -8,7 +8,7 @@ import {
   moveBackward,
   createVisitedGrid,
 } from "./dungeon";
-import { checkForEvent, getDebateSequence, GameEvent } from "./events";
+import { checkForEvent, getDebateSequence } from "./events";
 
 export interface PlayerState {
   x: number;
@@ -23,24 +23,24 @@ function markVisited(visited: boolean[][], x: number, y: number): boolean[][] {
   return next;
 }
 
-// DungeonGame clears lastEvent 3000ms after each message update.
-// We add a small buffer on top so the unlock fires after the display has cleared.
-const AUTO_CLEAR_MS = 3000;
-const UNLOCK_BUFFER_MS = 200;
+// How long after the last debate message to release the event lock
+const POST_EVENT_UNLOCK_MS = 1200;
 
 export function usePlayerState(dungeon: DungeonMap | null) {
   const [player, setPlayer] = useState<PlayerState | null>(null);
   const [visited, setVisited] = useState<boolean[][]>([]);
-  const [lastEvent, setLastEvent] = useState<GameEvent | null>(null);
+  const [eventLog, setEventLog] = useState<string[]>([]);
 
-  // Pending timers for debate sequence (including the unlock timer)
   const pendingTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
-  // Lock: true while an event sequence is still running
   const isEventRunning = useRef(false);
 
   const clearPendingTimers = useCallback(() => {
     pendingTimers.current.forEach(clearTimeout);
     pendingTimers.current = [];
+  }, []);
+
+  const addLog = useCallback((message: string) => {
+    setEventLog((prev) => [...prev, message]);
   }, []);
 
   const scheduleUnlock = useCallback((afterMs: number) => {
@@ -56,40 +56,35 @@ export function usePlayerState(dungeon: DungeonMap | null) {
     const v = createVisitedGrid(d.width, d.height);
     v[d.startY][d.startX] = true;
     setVisited(v);
-    setLastEvent(null);
+    setEventLog([]);
     setPlayer({ x: d.startX, y: d.startY, dir: d.startDir });
   }, [clearPendingTimers]);
 
   const onPlayerMoved = useCallback((nx: number, ny: number, prevX: number, prevY: number) => {
     setVisited((v) => markVisited(v, nx, ny));
 
-    // Skip new events while one is still in progress
     if (isEventRunning.current) return;
 
     if (nx !== prevX || ny !== prevY) {
       const event = checkForEvent(0.15);
       if (event) {
         isEventRunning.current = true;
-        setLastEvent(event);
+        addLog(event.message);
 
         if (event.type === "enemy") {
           const sequence = getDebateSequence();
           sequence.forEach(({ message, delay }) => {
-            const id = setTimeout(() => {
-              setLastEvent({ type: "debate", message });
-            }, delay);
+            const id = setTimeout(() => addLog(message), delay);
             pendingTimers.current.push(id);
           });
-          // Unlock after the last message has auto-cleared
           const lastDelay = sequence[sequence.length - 1].delay;
-          scheduleUnlock(lastDelay + AUTO_CLEAR_MS + UNLOCK_BUFFER_MS);
+          scheduleUnlock(lastDelay + POST_EVENT_UNLOCK_MS);
         } else {
-          // Resource event: single message, unlocks after auto-clear
-          scheduleUnlock(AUTO_CLEAR_MS + UNLOCK_BUFFER_MS);
+          scheduleUnlock(POST_EVENT_UNLOCK_MS);
         }
       }
     }
-  }, [scheduleUnlock]);
+  }, [addLog, scheduleUnlock]);
 
   const handleTurnLeft = useCallback(() => {
     if (!player) return;
@@ -115,13 +110,10 @@ export function usePlayerState(dungeon: DungeonMap | null) {
     onPlayerMoved(nx, ny, player.x, player.y);
   }, [player, dungeon, onPlayerMoved]);
 
-  const clearEvent = useCallback(() => setLastEvent(null), []);
-
   return {
     player,
     visited,
-    lastEvent,
-    clearEvent,
+    eventLog,
     initPlayer,
     handleTurnLeft,
     handleTurnRight,
