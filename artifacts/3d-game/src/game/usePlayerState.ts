@@ -84,7 +84,7 @@ export function usePlayerState(dungeon: DungeonMap | null, testMode: boolean) {
         }
       }
     }
-  }, [addLog, scheduleUnlock]);
+  }, [addLog, scheduleUnlock, testMode]);
 
   const handleTurnLeft = useCallback(() => {
     if (!player) return;
