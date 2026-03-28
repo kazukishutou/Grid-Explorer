@@ -10,7 +10,7 @@ export default function DungeonGame() {
   const [phase, setPhase] = useState<GamePhase>("start");
   const [dungeon, setDungeon] = useState<DungeonMap | null>(null);
   const [testMode, setTestMode] = useState(false);
-  const { player, visited, eventLog, initPlayer, handleTurnLeft, handleTurnRight, handleMoveForward, handleMoveBackward } =
+  const { player, visited, eventLog, food, initPlayer, handleTurnLeft, handleTurnRight, handleMoveForward, handleMoveBackward } =
     usePlayerState(dungeon, testMode);
 
   const [minimapOpen, setMinimapOpen] = useState(true);
@@ -107,6 +107,9 @@ export default function DungeonGame() {
               </div>
               <div style={styles.dirLabel}>
                 {["North", "East", "South", "West"][player.dir]}
+              </div>
+              <div style={styles.foodLabel}>
+                🍖 Food: {food}
               </div>
             </div>
             <div style={styles.hudRight}>
@@ -291,6 +294,13 @@ const styles: Record<string, React.CSSProperties> = {
     letterSpacing: 2,
     opacity: 0.7,
     marginTop: 2,
+  },
+  foodLabel: {
+    color: "#d4a050",
+    fontSize: 13,
+    letterSpacing: 1,
+    fontFamily: "'Courier New', monospace",
+    marginTop: 6,
   },
   hudRight: {
     pointerEvents: "auto",

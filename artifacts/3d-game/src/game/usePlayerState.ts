@@ -26,10 +26,14 @@ function markVisited(visited: boolean[][], x: number, y: number): boolean[][] {
 // How long after the last debate message to release the event lock
 const POST_EVENT_UNLOCK_MS = 1200;
 
+const FOOD_INITIAL = 10;
+const FOOD_LOG_COLOR = "#d4a050";
+
 export function usePlayerState(dungeon: DungeonMap | null, testMode: boolean) {
   const [player, setPlayer] = useState<PlayerState | null>(null);
   const [visited, setVisited] = useState<boolean[][]>([]);
   const [eventLog, setEventLog] = useState<Array<{ message: string; color?: string }>>([]);
+  const [food, setFood] = useState(FOOD_INITIAL);
 
   const pendingTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const isEventRunning = useRef(false);
@@ -57,6 +61,7 @@ export function usePlayerState(dungeon: DungeonMap | null, testMode: boolean) {
     v[d.startY][d.startX] = true;
     setVisited(v);
     setEventLog([]);
+    setFood(FOOD_INITIAL);
     setPlayer({ x: d.startX, y: d.startY, dir: d.startDir });
   }, [clearPendingTimers]);
 
@@ -72,12 +77,22 @@ export function usePlayerState(dungeon: DungeonMap | null, testMode: boolean) {
         addLog(event.message);
 
         if (event.type === "enemy") {
-          const sequence = getDebateSequence(testMode);
+          const { sequence, foodCost } = getDebateSequence(testMode);
           sequence.forEach(({ message, color, delay }) => {
             const id = setTimeout(() => addLog(message, color), delay);
             pendingTimers.current.push(id);
           });
           const lastDelay = sequence[sequence.length - 1].delay;
+          // Food deduction fires just after the outcome message
+          const foodDelay = lastDelay + 400;
+          const foodId = setTimeout(() => {
+            setFood((prev) => {
+              const next = Math.max(0, prev - foodCost);
+              addLog(`食料を${foodCost}消費した（残り: ${next}）`, FOOD_LOG_COLOR);
+              return next;
+            });
+          }, foodDelay);
+          pendingTimers.current.push(foodId);
           scheduleUnlock(lastDelay + POST_EVENT_UNLOCK_MS);
         } else {
           scheduleUnlock(POST_EVENT_UNLOCK_MS);
@@ -114,6 +129,7 @@ export function usePlayerState(dungeon: DungeonMap | null, testMode: boolean) {
     player,
     visited,
     eventLog,
+    food,
     initPlayer,
     handleTurnLeft,
     handleTurnRight,

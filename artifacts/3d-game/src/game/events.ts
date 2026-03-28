@@ -51,6 +51,12 @@ const VOTE_TO_RESULT: Record<Vote, string> = {
   wait:   "様子見",
 };
 
+export const VOTE_FOOD_COST: Record<string, number> = {
+  fight:  2,
+  escape: 1,
+  wait:   1,
+};
+
 const OUTCOME_MESSAGES: Record<string, string[]> = {
   "戦闘開始": ["戦闘に突入した！"],
   "逃走":     ["なんとか逃げ切った！", "ギリギリで離脱した…", "逃走に成功した。"],
@@ -72,9 +78,12 @@ export const VOTE_COLOR: Record<string, string> = {
   wait:   "#55ee88",
 };
 
-// Returns a sequence of {message, color?, delay} to display after an enemy encounter.
+// Returns { sequence, foodCost } for an enemy encounter.
 // testMode=true → 全員ランダム投票・全員weight=1・リーダー/反発無効・DEBUG表示
-export function getDebateSequence(testMode: boolean): Array<{ message: string; color?: string; delay: number }> {
+export function getDebateSequence(testMode: boolean): {
+  sequence: Array<{ message: string; color?: string; delay: number }>;
+  foodCost: number;
+} {
   const votes: Record<Vote, number> = { fight: 0, escape: 0, wait: 0 };
 
   let leaderVote: Vote | null = null;
@@ -162,7 +171,7 @@ export function getDebateSequence(testMode: boolean): Array<{ message: string; c
   const outcome = pickRandom(OUTCOME_MESSAGES[result]);
   sequence.push({ message: outcome, color: VOTE_COLOR[winningVote], delay: conclusionDelay + 900 });
 
-  return sequence;
+  return { sequence, foodCost: VOTE_FOOD_COST[winningVote] };
 }
 
 export function checkForEvent(probability = 0.15): GameEvent | null {
