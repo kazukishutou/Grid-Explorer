@@ -10,7 +10,7 @@ export default function DungeonGame() {
   const [phase, setPhase] = useState<GamePhase>("start");
   const [dungeon, setDungeon] = useState<DungeonMap | null>(null);
   const [testMode, setTestMode] = useState(false);
-  const { player, visited, eventLog, food, initPlayer, handleTurnLeft, handleTurnRight, handleMoveForward, handleMoveBackward } =
+  const { player, visited, eventLog, food, hasReturnFlag, initPlayer, handleTurnLeft, handleTurnRight, handleMoveForward, handleMoveBackward } =
     usePlayerState(dungeon, testMode);
 
   const [minimapOpen, setMinimapOpen] = useState(true);
@@ -111,6 +111,11 @@ export default function DungeonGame() {
               <div style={styles.foodLabel}>
                 🍖 Food: {food}
               </div>
+              {hasReturnFlag && (
+                <div style={styles.returnFlag}>
+                  ⚠ 帰還推奨
+                </div>
+              )}
             </div>
             <div style={styles.hudRight}>
               <button
@@ -301,6 +306,18 @@ const styles: Record<string, React.CSSProperties> = {
     letterSpacing: 1,
     fontFamily: "'Courier New', monospace",
     marginTop: 6,
+  },
+  returnFlag: {
+    marginTop: 6,
+    padding: "3px 8px",
+    background: "rgba(60,20,0,0.85)",
+    border: "1px solid #e08030",
+    color: "#e08030",
+    fontSize: 12,
+    letterSpacing: 1,
+    fontFamily: "'Courier New', monospace",
+    borderRadius: 2,
+    boxShadow: "0 0 8px rgba(224,128,48,0.35)",
   },
   hudRight: {
     pointerEvents: "auto",

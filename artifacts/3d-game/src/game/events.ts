@@ -180,3 +180,97 @@ export function checkForEvent(probability = 0.15): GameEvent | null {
   }
   return null;
 }
+
+// ─── 帰還判断イベント ───────────────────────────────────────────
+
+type ReturnVote = "continue" | "return";
+
+const RETURN_VOTE_OPTIONS: ReturnVote[] = ["continue", "return"];
+
+const RETURN_PERSONALITY_VOTE: Record<Personality, ReturnVote | "random"> = {
+  aggressive: "continue",
+  cautious:   "return",
+  neutral:    "random",
+  chaotic:    "random",
+};
+
+export const RETURN_VOTE_COLOR: Record<string, string> = {
+  continue: "#55ee88",
+  return:   "#ffcc44",
+};
+
+const RETURN_VOTE_OPINIONS: Record<ReturnVote, string[]> = {
+  continue: [
+    "まだ行けます！",
+    "引くのは早い。",
+    "食料なら何とかなる。",
+  ],
+  return: [
+    "引き返すべきだ。",
+    "このまま続けるのは危険だ…",
+    "食料が足りない、帰ろう。",
+  ],
+};
+
+const RETURN_TO_RESULT: Record<ReturnVote, string> = {
+  continue: "探索を続ける",
+  return:   "帰還する",
+};
+
+// Returns { sequence, decision } for a return-decision debate.
+export function getReturnDecisionSequence(testMode: boolean): {
+  sequence: Array<{ message: string; color?: string; delay: number }>;
+  decision: ReturnVote;
+} {
+  const votes: Record<ReturnVote, number> = { continue: 0, return: 0 };
+  let leaderVote: ReturnVote | null = null;
+
+  const sequence = TEAM.map((member, i) => {
+    let vote: ReturnVote;
+    let weight: number;
+
+    if (testMode) {
+      vote = pickRandom(RETURN_VOTE_OPTIONS);
+      weight = 1;
+    } else {
+      const voteKey = RETURN_PERSONALITY_VOTE[member.personality];
+      vote = voteKey === "random" ? pickRandom(RETURN_VOTE_OPTIONS) : voteKey;
+      weight = member.isLeader ? 2 : 1;
+    }
+
+    votes[vote] += weight;
+    if (member.isLeader) leaderVote = vote;
+
+    const label = testMode
+      ? member.name
+      : member.isLeader ? `${member.name}（リーダー）` : member.name;
+
+    const messageText =
+      testMode || member.personality === "chaotic"
+        ? `${label}：「（DEBUG）${vote} を選択」`
+        : `${label}：「${pickRandom(RETURN_VOTE_OPINIONS[vote])}」`;
+
+    return {
+      message: messageText,
+      color: RETURN_VOTE_COLOR[vote],
+      delay: 800 + i * 700,
+    };
+  });
+
+  const entries = Object.entries(votes) as [ReturnVote, number][];
+  const maxCount = Math.max(...entries.map(([, n]) => n));
+  const winners = entries.filter(([, n]) => n === maxCount).map(([v]) => v);
+  const decision: ReturnVote =
+    winners.length > 1 && leaderVote && winners.includes(leaderVote)
+      ? leaderVote
+      : pickRandom(winners);
+
+  const conclusionDelay = 800 + TEAM.length * 700;
+  sequence.push({
+    message: `→ 結論：${RETURN_TO_RESULT[decision]}`,
+    color: RETURN_VOTE_COLOR[decision],
+    delay: conclusionDelay,
+  });
+
+  return { sequence, decision };
+}

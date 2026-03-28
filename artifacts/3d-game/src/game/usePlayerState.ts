@@ -8,7 +8,7 @@ import {
   moveBackward,
   createVisitedGrid,
 } from "./dungeon";
-import { checkForEvent, getDebateSequence } from "./events";
+import { checkForEvent, getDebateSequence, getReturnDecisionSequence } from "./events";
 
 export interface PlayerState {
   x: number;
@@ -34,9 +34,12 @@ export function usePlayerState(dungeon: DungeonMap | null, testMode: boolean) {
   const [visited, setVisited] = useState<boolean[][]>([]);
   const [eventLog, setEventLog] = useState<Array<{ message: string; color?: string }>>([]);
   const [food, setFood] = useState(FOOD_INITIAL);
+  const [hasReturnFlag, setHasReturnFlag] = useState(false);
 
   const pendingTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const isEventRunning = useRef(false);
+  const foodRef = useRef(FOOD_INITIAL);
+  const returnDecisionFired = useRef(false);
 
   const clearPendingTimers = useCallback(() => {
     pendingTimers.current.forEach(clearTimeout);
@@ -57,11 +60,14 @@ export function usePlayerState(dungeon: DungeonMap | null, testMode: boolean) {
   const initPlayer = useCallback((d: DungeonMap) => {
     clearPendingTimers();
     isEventRunning.current = false;
+    foodRef.current = FOOD_INITIAL;
+    returnDecisionFired.current = false;
     const v = createVisitedGrid(d.width, d.height);
     v[d.startY][d.startX] = true;
     setVisited(v);
     setEventLog([]);
     setFood(FOOD_INITIAL);
+    setHasReturnFlag(false);
     setPlayer({ x: d.startX, y: d.startY, dir: d.startDir });
   }, [clearPendingTimers]);
 
@@ -86,11 +92,35 @@ export function usePlayerState(dungeon: DungeonMap | null, testMode: boolean) {
           // Food deduction fires just after the outcome message
           const foodDelay = lastDelay + 400;
           const foodId = setTimeout(() => {
-            setFood((prev) => {
-              const next = Math.max(0, prev - foodCost);
-              addLog(`食料を${foodCost}消費した（残り: ${next}）`, FOOD_LOG_COLOR);
-              return next;
-            });
+            const next = Math.max(0, foodRef.current - foodCost);
+            foodRef.current = next;
+            setFood(next);
+            addLog(`食料を${foodCost}消費した（残り: ${next}）`, FOOD_LOG_COLOR);
+
+            // food が 3 以下に落ちたら帰還判断イベントを予約
+            // 戦闘イベントのロック解除（lastDelay+1200）より後に発火させるため
+            // food ログ (foodDelay) の 1600ms 後 = lastDelay + 2000
+            if (next <= 3 && !returnDecisionFired.current) {
+              returnDecisionFired.current = true;
+              const triggerId = setTimeout(() => {
+                if (isEventRunning.current) return;
+                isEventRunning.current = true;
+                addLog("── 食料が尽きかけている ──", "#e08030");
+                addLog("帰還すべきか、議論が始まった。", "#e08030");
+                const { sequence: rSeq, decision } = getReturnDecisionSequence(testMode);
+                rSeq.forEach(({ message, color, delay }) => {
+                  const id = setTimeout(() => addLog(message, color), delay);
+                  pendingTimers.current.push(id);
+                });
+                const lastRDelay = rSeq[rSeq.length - 1].delay;
+                scheduleUnlock(lastRDelay + POST_EVENT_UNLOCK_MS);
+                if (decision === "return") {
+                  const flagId = setTimeout(() => setHasReturnFlag(true), lastRDelay + 400);
+                  pendingTimers.current.push(flagId);
+                }
+              }, POST_EVENT_UNLOCK_MS + 400); // 戦闘ロック解除後 400ms
+              pendingTimers.current.push(triggerId);
+            }
           }, foodDelay);
           pendingTimers.current.push(foodId);
           scheduleUnlock(lastDelay + POST_EVENT_UNLOCK_MS);
@@ -130,6 +160,7 @@ export function usePlayerState(dungeon: DungeonMap | null, testMode: boolean) {
     visited,
     eventLog,
     food,
+    hasReturnFlag,
     initPlayer,
     handleTurnLeft,
     handleTurnRight,
