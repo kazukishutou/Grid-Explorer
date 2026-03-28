@@ -93,13 +93,6 @@ function buildOccluderScene(dungeon: DungeonMap): THREE.Group {
       group.add(m);
     }
   }
-  const cx = ((dungeon.width - 1) / 2) * CELL_SIZE;
-  const cz = ((dungeon.height - 1) / 2) * CELL_SIZE;
-  const pg = new THREE.PlaneGeometry(dungeon.width * CELL_SIZE, dungeon.height * CELL_SIZE);
-  const floor = new THREE.Mesh(pg, mat);
-  floor.rotation.x = -Math.PI / 2; floor.position.set(cx, 0, cz); group.add(floor);
-  const ceil = new THREE.Mesh(pg.clone(), mat);
-  ceil.rotation.x = Math.PI / 2; ceil.position.set(cx, WALL_HEIGHT, cz); group.add(ceil);
   return group;
 }
 
