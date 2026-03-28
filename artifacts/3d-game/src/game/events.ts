@@ -65,9 +65,16 @@ export function triggerEvent(type: "resource" | "enemy"): GameEvent {
   return { type, message: EVENT_MESSAGES[type] };
 }
 
-// Returns a sequence of {message, delay} to display after an enemy encounter.
+// Vote → display color
+export const VOTE_COLOR: Record<string, string> = {
+  fight:  "#ff5555",
+  escape: "#ffcc44",
+  wait:   "#55ee88",
+};
+
+// Returns a sequence of {message, color?, delay} to display after an enemy encounter.
 // testMode=true → 全員ランダム投票・全員weight=1・リーダー/反発無効・DEBUG表示
-export function getDebateSequence(testMode: boolean): Array<{ message: string; delay: number }> {
+export function getDebateSequence(testMode: boolean): Array<{ message: string; color?: string; delay: number }> {
   const votes: Record<Vote, number> = { fight: 0, escape: 0, wait: 0 };
 
   let leaderVote: Vote | null = null;
@@ -130,6 +137,7 @@ export function getDebateSequence(testMode: boolean): Array<{ message: string; d
 
     return {
       message: messageText,
+      color: VOTE_COLOR[vote],
       delay: 800 + i * 700,
     };
   });
@@ -149,10 +157,10 @@ export function getDebateSequence(testMode: boolean): Array<{ message: string; d
   console.log("winning vote:", winningVote, "→ result:", result);
 
   const conclusionDelay = 800 + TEAM.length * 700;
-  sequence.push({ message: `→ 結論：${result}`, delay: conclusionDelay });
+  sequence.push({ message: `→ 結論：${result}`, color: VOTE_COLOR[winningVote], delay: conclusionDelay });
 
   const outcome = pickRandom(OUTCOME_MESSAGES[result]);
-  sequence.push({ message: outcome, delay: conclusionDelay + 900 });
+  sequence.push({ message: outcome, color: VOTE_COLOR[winningVote], delay: conclusionDelay + 900 });
 
   return sequence;
 }

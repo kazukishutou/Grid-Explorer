@@ -29,7 +29,7 @@ const POST_EVENT_UNLOCK_MS = 1200;
 export function usePlayerState(dungeon: DungeonMap | null, testMode: boolean) {
   const [player, setPlayer] = useState<PlayerState | null>(null);
   const [visited, setVisited] = useState<boolean[][]>([]);
-  const [eventLog, setEventLog] = useState<string[]>([]);
+  const [eventLog, setEventLog] = useState<Array<{ message: string; color?: string }>>([]);
 
   const pendingTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const isEventRunning = useRef(false);
@@ -39,8 +39,8 @@ export function usePlayerState(dungeon: DungeonMap | null, testMode: boolean) {
     pendingTimers.current = [];
   }, []);
 
-  const addLog = useCallback((message: string) => {
-    setEventLog((prev) => [...prev, message]);
+  const addLog = useCallback((message: string, color?: string) => {
+    setEventLog((prev) => [...prev, { message, color }]);
   }, []);
 
   const scheduleUnlock = useCallback((afterMs: number) => {
@@ -73,8 +73,8 @@ export function usePlayerState(dungeon: DungeonMap | null, testMode: boolean) {
 
         if (event.type === "enemy") {
           const sequence = getDebateSequence(testMode);
-          sequence.forEach(({ message, delay }) => {
-            const id = setTimeout(() => addLog(message), delay);
+          sequence.forEach(({ message, color, delay }) => {
+            const id = setTimeout(() => addLog(message, color), delay);
             pendingTimers.current.push(id);
           });
           const lastDelay = sequence[sequence.length - 1].delay;

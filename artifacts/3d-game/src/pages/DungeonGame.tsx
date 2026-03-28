@@ -133,9 +133,15 @@ export default function DungeonGame() {
 
           {eventLog.length > 0 && (
             <div style={styles.eventLog}>
-              {eventLog.map((msg, i) => (
-                <div key={i} style={styles.eventMessage}>
-                  ▶ {msg}
+              {eventLog.map((entry, i) => (
+                <div
+                  key={i}
+                  style={{
+                    ...styles.eventMessage,
+                    ...(entry.color ? { color: entry.color } : {}),
+                  }}
+                >
+                  ▶ {entry.message}
                 </div>
               ))}
               <div ref={logEndRef} />
