@@ -3,6 +3,7 @@ import { generateDungeon, DungeonMap } from "../game/dungeon";
 import { usePlayerState } from "../game/usePlayerState";
 import DungeonRenderer from "../game/DungeonRenderer";
 import Minimap from "../game/Minimap";
+import { TEAM } from "../game/events";
 
 type GamePhase = "start" | "playing";
 type AppMode = "dungeon" | "commune";
@@ -11,25 +12,33 @@ interface CharStat {
   name: string;
   stress: number;
   morale: number;
+  selected: boolean;
 }
 
 const INITIAL_CHAR_STATS: CharStat[] = [
-  { name: "アレス", stress: 0, morale: 0 },
-  { name: "セイラ", stress: 0, morale: 0 },
-  { name: "レン",   stress: 0, morale: 0 },
-  { name: "カイ",   stress: 0, morale: 0 },
+  { name: "アレス", stress: 0, morale: 0, selected: true },
+  { name: "セイラ", stress: 0, morale: 0, selected: true },
+  { name: "レン",   stress: 0, morale: 0, selected: true },
+  { name: "カイ",   stress: 0, morale: 0, selected: true },
 ];
 
 export default function DungeonGame() {
   const [phase, setPhase] = useState<GamePhase>("start");
   const [dungeon, setDungeon] = useState<DungeonMap | null>(null);
   const [testMode, setTestMode] = useState(false);
-  const { player, visited, eventLog, food, scrap, stepCount, isRunEnded, characterChanges, hasReturnFlag, initPlayer, handleTurnLeft, handleTurnRight, handleMoveForward, handleMoveBackward } =
-    usePlayerState(dungeon, testMode);
-
   const [minimapOpen, setMinimapOpen] = useState(true);
   const [appMode, setAppMode] = useState<AppMode>("dungeon");
   const [charStats, setCharStats] = useState<CharStat[]>(INITIAL_CHAR_STATS);
+
+  // Derived: selected team members mapped to their full TeamMember definition
+  const selectedTeam = charStats
+    .filter((c) => c.selected)
+    .map((c) => TEAM.find((t) => t.name === c.name)!)
+    .filter(Boolean) as typeof TEAM;
+
+  const { player, visited, eventLog, food, scrap, stepCount, isRunEnded, characterChanges, hasReturnFlag, initPlayer, handleTurnLeft, handleTurnRight, handleMoveForward, handleMoveBackward } =
+    usePlayerState(dungeon, testMode, selectedTeam);
+
   const lastKeyTime = useRef<number>(0);
   const logEndRef = useRef<HTMLDivElement>(null);
 
@@ -61,6 +70,19 @@ export default function DungeonGame() {
     setPhase("playing");
     setAppMode("dungeon");
   }, [initPlayer]);
+
+  const toggleSelect = useCallback((name: string) => {
+    setCharStats((prev) => {
+      const target = prev.find((c) => c.name === name);
+      if (!target) return prev;
+      const numSelected = prev.filter((c) => c.selected).length;
+      // 選択解除は常に可能（ただし1人以下にはできない）
+      if (target.selected && numSelected <= 1) return prev;
+      // 選択追加は最大4人まで（実質制限なし）
+      if (!target.selected && numSelected >= 4) return prev;
+      return prev.map((c) => c.name === name ? { ...c, selected: !c.selected } : c);
+    });
+  }, []);
 
   useEffect(() => {
     if (phase !== "playing") return;
@@ -101,6 +123,7 @@ export default function DungeonGame() {
   }, [phase, handleMoveForward, handleMoveBackward, handleTurnLeft, handleTurnRight]);
 
   if (appMode === "commune") {
+    const selectedNames = charStats.filter((c) => c.selected).map((c) => c.name);
     return (
       <div style={styles.communeScreen}>
         <div style={styles.communePanel}>
@@ -108,21 +131,57 @@ export default function DungeonGame() {
             <div style={styles.communeTitle}>COMMUNE</div>
             <div style={styles.communeSubtitle}>拠　点</div>
           </div>
-          <div style={styles.communeDivider} />
+          <div style={styles.communeSectionLabel}>探索チーム編成</div>
           <div style={styles.charList}>
             {charStats.map((c) => (
-              <div key={c.name} style={styles.charCard}>
-                <div style={styles.charCardName}>{c.name}</div>
+              <div
+                key={c.name}
+                onClick={() => toggleSelect(c.name)}
+                style={{
+                  ...styles.charCard,
+                  ...(c.selected ? styles.charCardSelected : styles.charCardUnselected),
+                }}
+              >
+                <div style={styles.charCardLeft}>
+                  <span style={{
+                    ...styles.charSelectDot,
+                    background: c.selected ? "#4499bb" : "#1a2e3a",
+                    boxShadow: c.selected ? "0 0 6px rgba(68,153,187,0.6)" : "none",
+                  }} />
+                  <span style={{
+                    ...styles.charCardName,
+                    color: c.selected ? "#a8ccd8" : "#445566",
+                  }}>{c.name}</span>
+                </div>
                 <div style={styles.charCardStats}>
-                  <span style={styles.charCardStress}>ストレス　{c.stress}</span>
-                  <span style={styles.charCardMorale}>モラル　{c.morale}</span>
+                  <span style={{
+                    ...styles.charCardStress,
+                    opacity: c.selected ? 1 : 0.35,
+                  }}>ST　{c.stress}</span>
+                  <span style={{
+                    ...styles.charCardMorale,
+                    opacity: c.selected ? 1 : 0.35,
+                  }}>MO　{c.morale}</span>
                 </div>
               </div>
             ))}
           </div>
           <div style={styles.communeDivider} />
-          <button style={styles.communeExploreBtn} onClick={startGame}>
-            探索に出る
+          <div style={styles.selectionSummary}>
+            <span style={styles.selectionLabel}>編成中</span>
+            <span style={styles.selectionNames}>
+              {selectedNames.length > 0 ? selectedNames.join("・") : "（未選択）"}
+            </span>
+            <span style={styles.selectionCount}>{selectedNames.length} / 4</span>
+          </div>
+          <button
+            style={{
+              ...styles.communeExploreBtn,
+              ...(selectedNames.length === 0 ? styles.communeExploreBtnDisabled : {}),
+            }}
+            onClick={selectedNames.length > 0 ? startGame : undefined}
+          >
+            このメンバーで探索
           </button>
         </div>
       </div>
@@ -594,6 +653,14 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: "column",
     gap: 10,
   },
+  communeSectionLabel: {
+    color: "#2a5a70",
+    fontSize: 11,
+    letterSpacing: 3,
+    textTransform: "uppercase" as const,
+    marginBottom: 12,
+    marginTop: 8,
+  },
   charCard: {
     background: "#0a1520",
     border: "1px solid #1a2e3a",
@@ -602,6 +669,29 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
+    cursor: "pointer",
+    transition: "border-color 0.15s, background 0.15s",
+  },
+  charCardSelected: {
+    border: "1px solid #2a6a88",
+    background: "#0d1e2c",
+  },
+  charCardUnselected: {
+    border: "1px solid #111c24",
+    background: "#090e13",
+  },
+  charCardLeft: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+  },
+  charSelectDot: {
+    display: "inline-block",
+    width: 8,
+    height: 8,
+    borderRadius: "50%",
+    border: "1px solid #2a5a70",
+    flexShrink: 0,
   },
   charCardName: {
     color: "#80a8b8",
@@ -623,6 +713,29 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 12,
     letterSpacing: 1,
   },
+  selectionSummary: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    fontSize: 12,
+    letterSpacing: 1,
+    marginBottom: 14,
+  },
+  selectionLabel: {
+    color: "#2a5a70",
+    letterSpacing: 2,
+    fontSize: 11,
+  },
+  selectionNames: {
+    color: "#5a9ab8",
+    flex: 1,
+    fontSize: 12,
+  },
+  selectionCount: {
+    color: "#2a5a70",
+    fontSize: 11,
+    letterSpacing: 1,
+  },
   communeExploreBtn: {
     background: "rgba(5,15,25,0.8)",
     border: "1px solid #4499bb",
@@ -634,6 +747,11 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 2,
     letterSpacing: 2,
     width: "100%",
+  },
+  communeExploreBtnDisabled: {
+    border: "1px solid #1a3a4a",
+    color: "#1a3a4a",
+    cursor: "default",
   },
   hudRight: {
     pointerEvents: "auto",

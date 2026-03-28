@@ -8,7 +8,7 @@ import {
   moveBackward,
   createVisitedGrid,
 } from "./dungeon";
-import { checkForEvent, getDebateSequence, getReturnDecisionSequence, Vote } from "./events";
+import { checkForEvent, getDebateSequence, getReturnDecisionSequence, Vote, TeamMember, TEAM } from "./events";
 
 export interface CharChange {
   name: string;
@@ -46,7 +46,7 @@ const FOOD_LOG_COLOR = "#d4a050";
 // 危険状態（food <= 3）で毎ターン発火する帰還判断イベントの確率
 const RETURN_EVENT_PROBABILITY = 0.2;
 
-export function usePlayerState(dungeon: DungeonMap | null, testMode: boolean) {
+export function usePlayerState(dungeon: DungeonMap | null, testMode: boolean, selectedTeam: TeamMember[] = TEAM) {
   const [player, setPlayer] = useState<PlayerState | null>(null);
   const [visited, setVisited] = useState<boolean[][]>([]);
   const [eventLog, setEventLog] = useState<Array<{ message: string; color?: string }>>([]);
@@ -63,6 +63,8 @@ export function usePlayerState(dungeon: DungeonMap | null, testMode: boolean) {
   const foodRef = useRef(FOOD_INITIAL);
   const isRunEndedRef = useRef(false);
   const fightCountRef = useRef(0);
+  const selectedTeamRef = useRef<TeamMember[]>(selectedTeam);
+  selectedTeamRef.current = selectedTeam;
 
   const clearPendingTimers = useCallback(() => {
     pendingTimers.current.forEach(clearTimeout);
@@ -117,7 +119,7 @@ export function usePlayerState(dungeon: DungeonMap | null, testMode: boolean) {
         addLog(event.message);
 
         if (event.type === "enemy") {
-          const { sequence, foodCost, scrapGain, outcome } = getDebateSequence(testMode);
+          const { sequence, foodCost, scrapGain, outcome } = getDebateSequence(testMode, selectedTeamRef.current);
           if (outcome === "fight") fightCountRef.current++;
           sequence.forEach(({ message, color, delay }) => {
             const id = setTimeout(() => addLog(message, color), delay);
@@ -146,7 +148,7 @@ export function usePlayerState(dungeon: DungeonMap | null, testMode: boolean) {
         isEventRunning.current = true;
         addLog("── 食料が尽きかけている ──", "#e08030");
         addLog("帰還すべきか、議論が始まった。", "#e08030");
-        const { sequence: rSeq, decision } = getReturnDecisionSequence(testMode);
+        const { sequence: rSeq, decision } = getReturnDecisionSequence(testMode, selectedTeamRef.current);
         rSeq.forEach(({ message, color, delay }) => {
           const id = setTimeout(() => addLog(message, color), delay);
           pendingTimers.current.push(id);
@@ -156,11 +158,14 @@ export function usePlayerState(dungeon: DungeonMap | null, testMode: boolean) {
         if (decision === "return") {
           const flagId = setTimeout(() => {
             const fc = fightCountRef.current;
-            const changes: CharChange[] = CHAR_PROFILES.map(({ name, stressThreshold }) => ({
-              name,
-              stressDelta: fc >= stressThreshold ? 1 : 0,
-              moraleDelta: 1,
-            }));
+            const activeNames = new Set(selectedTeamRef.current.map((m) => m.name));
+            const changes: CharChange[] = CHAR_PROFILES
+              .filter(({ name }) => activeNames.has(name))
+              .map(({ name, stressThreshold }) => ({
+                name,
+                stressDelta: fc >= stressThreshold ? 1 : 0,
+                moraleDelta: 1,
+              }));
             setCharacterChanges(changes);
             isRunEndedRef.current = true;
             setIsRunEnded(true);

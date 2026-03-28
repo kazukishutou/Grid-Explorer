@@ -13,14 +13,14 @@ const EVENT_MESSAGES: Record<"resource" | "enemy", string> = {
 type Personality = "aggressive" | "cautious" | "neutral" | "chaotic";
 export type Vote = "fight" | "escape" | "wait";
 
-interface TeamMember {
+export interface TeamMember {
   name: string;
   personality: Personality;
   isLeader: boolean;
   dislikesLeader: boolean;
 }
 
-const TEAM: TeamMember[] = [
+export const TEAM: TeamMember[] = [
   { name: "アレス", personality: "aggressive", isLeader: true,  dislikesLeader: false },
   { name: "セイラ", personality: "cautious",   isLeader: false, dislikesLeader: true  },
   { name: "レン",   personality: "neutral",    isLeader: false, dislikesLeader: false },
@@ -86,7 +86,7 @@ export const VOTE_COLOR: Record<string, string> = {
 
 // Returns { sequence, foodCost, scrapGain, outcome } for an enemy encounter.
 // testMode=true → 全員ランダム投票・全員weight=1・リーダー/反発無効・DEBUG表示
-export function getDebateSequence(testMode: boolean): {
+export function getDebateSequence(testMode: boolean, team: TeamMember[] = TEAM): {
   sequence: Array<{ message: string; color?: string; delay: number }>;
   foodCost: number;
   scrapGain: number;
@@ -103,7 +103,7 @@ export function getDebateSequence(testMode: boolean): {
     "あなたの判断は疑わしい",
   ];
 
-  const sequence = TEAM.map((member, i) => {
+  const sequence = team.map((member, i) => {
     let vote: Vote;
     let weight: number;
     let rebelled = false;
@@ -173,7 +173,7 @@ export function getDebateSequence(testMode: boolean): {
 
   console.log("winning vote:", winningVote, "→ result:", result);
 
-  const conclusionDelay = 800 + TEAM.length * 700;
+  const conclusionDelay = 800 + team.length * 700;
   sequence.push({ message: `→ 結論：${result}`, color: VOTE_COLOR[winningVote], delay: conclusionDelay });
 
   const outcome = pickRandom(OUTCOME_MESSAGES[result]);
@@ -226,14 +226,14 @@ const RETURN_TO_RESULT: Record<ReturnVote, string> = {
 };
 
 // Returns { sequence, decision } for a return-decision debate.
-export function getReturnDecisionSequence(testMode: boolean): {
+export function getReturnDecisionSequence(testMode: boolean, team: TeamMember[] = TEAM): {
   sequence: Array<{ message: string; color?: string; delay: number }>;
   decision: ReturnVote;
 } {
   const votes: Record<ReturnVote, number> = { continue: 0, return: 0 };
   let leaderVote: ReturnVote | null = null;
 
-  const sequence = TEAM.map((member, i) => {
+  const sequence = team.map((member, i) => {
     let vote: ReturnVote;
     let weight: number;
 
@@ -273,7 +273,7 @@ export function getReturnDecisionSequence(testMode: boolean): {
       ? leaderVote
       : pickRandom(winners);
 
-  const conclusionDelay = 800 + TEAM.length * 700;
+  const conclusionDelay = 800 + team.length * 700;
   sequence.push({
     message: `→ 結論：${RETURN_TO_RESULT[decision]}`,
     color: RETURN_VOTE_COLOR[decision],
