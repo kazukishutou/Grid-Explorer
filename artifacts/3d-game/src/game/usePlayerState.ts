@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import {
   DungeonMap,
   Direction,
@@ -8,7 +8,7 @@ import {
   moveBackward,
   createVisitedGrid,
 } from "./dungeon";
-import { checkForEvent, GameEvent } from "./events";
+import { checkForEvent, getDebateSequence, GameEvent } from "./events";
 
 export interface PlayerState {
   x: number;
@@ -28,21 +28,44 @@ export function usePlayerState(dungeon: DungeonMap | null) {
   const [visited, setVisited] = useState<boolean[][]>([]);
   const [lastEvent, setLastEvent] = useState<GameEvent | null>(null);
 
+  // Track pending debate timers so they can be cancelled if a new event fires
+  const debateTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  const clearDebateTimers = useCallback(() => {
+    debateTimers.current.forEach(clearTimeout);
+    debateTimers.current = [];
+  }, []);
+
   const initPlayer = useCallback((d: DungeonMap) => {
+    clearDebateTimers();
     const v = createVisitedGrid(d.width, d.height);
     v[d.startY][d.startX] = true;
     setVisited(v);
     setLastEvent(null);
     setPlayer({ x: d.startX, y: d.startY, dir: d.startDir });
-  }, []);
+  }, [clearDebateTimers]);
 
   const onPlayerMoved = useCallback((nx: number, ny: number, prevX: number, prevY: number) => {
     setVisited((v) => markVisited(v, nx, ny));
     if (nx !== prevX || ny !== prevY) {
       const event = checkForEvent(0.15);
-      if (event) setLastEvent(event);
+      if (event) {
+        // Cancel any ongoing debate before starting a new one
+        clearDebateTimers();
+        setLastEvent(event);
+
+        if (event.type === "enemy") {
+          const sequence = getDebateSequence();
+          sequence.forEach(({ message, delay }) => {
+            const id = setTimeout(() => {
+              setLastEvent({ type: "debate", message });
+            }, delay);
+            debateTimers.current.push(id);
+          });
+        }
+      }
     }
-  }, []);
+  }, [clearDebateTimers]);
 
   const handleTurnLeft = useCallback(() => {
     if (!player) return;
