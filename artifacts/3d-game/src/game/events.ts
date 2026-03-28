@@ -135,7 +135,7 @@ export function getDebateSequence(): Array<{ message: string; delay: number }> {
 
 export function checkForEvent(probability = 0.15): GameEvent | null {
   if (Math.random() < probability) {
-    return triggerEvent(Math.random() < 0.6 ? "resource" : "enemy");
+    return triggerEvent(Math.random() < 0.1 ? "resource" : "enemy");
   }
   return null;
 }
