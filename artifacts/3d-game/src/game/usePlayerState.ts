@@ -8,7 +8,21 @@ import {
   moveBackward,
   createVisitedGrid,
 } from "./dungeon";
-import { checkForEvent, getDebateSequence, GameEvent } from "./events";
+import { checkForEvent, getDebateSequence, getReturnDecisionSequence, Vote, TeamMember, TEAM } from "./events";
+
+export interface CharChange {
+  name: string;
+  stressDelta: number;
+  moraleDelta: number;
+}
+
+// stressThreshold: 戦闘回数がこれ以上でストレス +1
+const CHAR_PROFILES: Array<{ name: string; stressThreshold: number }> = [
+  { name: "アレス", stressThreshold: 2 },
+  { name: "セイラ", stressThreshold: 5 },
+  { name: "レン",   stressThreshold: 3 },
+  { name: "カイ",   stressThreshold: 2 },
+];
 
 export interface PlayerState {
   x: number;
@@ -23,24 +37,42 @@ function markVisited(visited: boolean[][], x: number, y: number): boolean[][] {
   return next;
 }
 
-// DungeonGame clears lastEvent 3000ms after each message update.
-// We add a small buffer on top so the unlock fires after the display has cleared.
-const AUTO_CLEAR_MS = 3000;
-const UNLOCK_BUFFER_MS = 200;
+// How long after the last debate message to release the event lock
+const POST_EVENT_UNLOCK_MS = 1200;
 
-export function usePlayerState(dungeon: DungeonMap | null) {
+const FOOD_INITIAL = 10;
+const FOOD_LOG_COLOR = "#d4a050";
+
+// 危険状態（food <= 3）で毎ターン発火する帰還判断イベントの確率
+const RETURN_EVENT_PROBABILITY = 0.2;
+
+export function usePlayerState(dungeon: DungeonMap | null, testMode: boolean, selectedTeam: TeamMember[] = TEAM) {
   const [player, setPlayer] = useState<PlayerState | null>(null);
   const [visited, setVisited] = useState<boolean[][]>([]);
-  const [lastEvent, setLastEvent] = useState<GameEvent | null>(null);
+  const [eventLog, setEventLog] = useState<Array<{ message: string; color?: string }>>([]);
+  const [food, setFood] = useState(FOOD_INITIAL);
+  const [scrap, setScrap] = useState(0);
+  const [hasReturnFlag, setHasReturnFlag] = useState(false);
+  const [stepCount, setStepCount] = useState(0);
+  const [isRunEnded, setIsRunEnded] = useState(false);
 
-  // Pending timers for debate sequence (including the unlock timer)
+  const [characterChanges, setCharacterChanges] = useState<CharChange[]>([]);
+
   const pendingTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
-  // Lock: true while an event sequence is still running
   const isEventRunning = useRef(false);
+  const foodRef = useRef(FOOD_INITIAL);
+  const isRunEndedRef = useRef(false);
+  const fightCountRef = useRef(0);
+  const selectedTeamRef = useRef<TeamMember[]>(selectedTeam);
+  selectedTeamRef.current = selectedTeam;
 
   const clearPendingTimers = useCallback(() => {
     pendingTimers.current.forEach(clearTimeout);
     pendingTimers.current = [];
+  }, []);
+
+  const addLog = useCallback((message: string, color?: string) => {
+    setEventLog((prev) => [...prev, { message, color }]);
   }, []);
 
   const scheduleUnlock = useCallback((afterMs: number) => {
@@ -53,43 +85,99 @@ export function usePlayerState(dungeon: DungeonMap | null) {
   const initPlayer = useCallback((d: DungeonMap) => {
     clearPendingTimers();
     isEventRunning.current = false;
+    foodRef.current = FOOD_INITIAL;
+    isRunEndedRef.current = false;
+    fightCountRef.current = 0;
     const v = createVisitedGrid(d.width, d.height);
     v[d.startY][d.startX] = true;
     setVisited(v);
-    setLastEvent(null);
+    setEventLog([]);
+    setFood(FOOD_INITIAL);
+    setScrap(0);
+    setCharacterChanges([]);
+    setHasReturnFlag(false);
+    setStepCount(0);
+    setIsRunEnded(false);
     setPlayer({ x: d.startX, y: d.startY, dir: d.startDir });
   }, [clearPendingTimers]);
 
   const onPlayerMoved = useCallback((nx: number, ny: number, prevX: number, prevY: number) => {
+    if (isRunEndedRef.current) return;
+
     setVisited((v) => markVisited(v, nx, ny));
 
-    // Skip new events while one is still in progress
     if (isEventRunning.current) return;
 
     if (nx !== prevX || ny !== prevY) {
+      setStepCount((s) => s + 1);
+
       const event = checkForEvent(0.15);
+
       if (event) {
+        // ── 通常イベント（敵遭遇 / リソース）──
         isEventRunning.current = true;
-        setLastEvent(event);
+        addLog(event.message);
 
         if (event.type === "enemy") {
-          const sequence = getDebateSequence();
-          sequence.forEach(({ message, delay }) => {
-            const id = setTimeout(() => {
-              setLastEvent({ type: "debate", message });
-            }, delay);
+          const { sequence, foodCost, scrapGain, outcome } = getDebateSequence(testMode, selectedTeamRef.current);
+          if (outcome === "fight") fightCountRef.current++;
+          sequence.forEach(({ message, color, delay }) => {
+            const id = setTimeout(() => addLog(message, color), delay);
             pendingTimers.current.push(id);
           });
-          // Unlock after the last message has auto-cleared
           const lastDelay = sequence[sequence.length - 1].delay;
-          scheduleUnlock(lastDelay + AUTO_CLEAR_MS + UNLOCK_BUFFER_MS);
+          const foodDelay = lastDelay + 400;
+          const foodId = setTimeout(() => {
+            const next = Math.max(0, foodRef.current - foodCost);
+            foodRef.current = next;
+            setFood(next);
+            addLog(`食料を${foodCost}消費した（残り: ${next}）`, FOOD_LOG_COLOR);
+            if (scrapGain > 0) {
+              setScrap((s) => s + scrapGain);
+              addLog(`スクラップ +${scrapGain} 回収`, "#88ddff");
+            }
+          }, foodDelay);
+          pendingTimers.current.push(foodId);
+          scheduleUnlock(lastDelay + POST_EVENT_UNLOCK_MS);
         } else {
-          // Resource event: single message, unlocks after auto-clear
-          scheduleUnlock(AUTO_CLEAR_MS + UNLOCK_BUFFER_MS);
+          scheduleUnlock(POST_EVENT_UNLOCK_MS);
+        }
+
+      } else if (foodRef.current <= 3 && Math.random() < RETURN_EVENT_PROBABILITY) {
+        // ── 帰還判断イベント（food <= 3 の危険状態で確率発火）──
+        isEventRunning.current = true;
+        addLog("── 食料が尽きかけている ──", "#e08030");
+        addLog("帰還すべきか、議論が始まった。", "#e08030");
+        const { sequence: rSeq, decision } = getReturnDecisionSequence(testMode, selectedTeamRef.current);
+        rSeq.forEach(({ message, color, delay }) => {
+          const id = setTimeout(() => addLog(message, color), delay);
+          pendingTimers.current.push(id);
+        });
+        const lastRDelay = rSeq[rSeq.length - 1].delay;
+        scheduleUnlock(lastRDelay + POST_EVENT_UNLOCK_MS);
+        if (decision === "return") {
+          const flagId = setTimeout(() => {
+            const fc = fightCountRef.current;
+            const activeNames = new Set(selectedTeamRef.current.map((m) => m.name));
+            const changes: CharChange[] = CHAR_PROFILES
+              .filter(({ name }) => activeNames.has(name))
+              .map(({ name, stressThreshold }) => ({
+                name,
+                stressDelta: fc >= stressThreshold ? 1 : 0,
+                moraleDelta: 1,
+              }));
+            setCharacterChanges(changes);
+            isRunEndedRef.current = true;
+            setIsRunEnded(true);
+          }, lastRDelay + 400);
+          pendingTimers.current.push(flagId);
+        } else {
+          const flagId = setTimeout(() => setHasReturnFlag(true), lastRDelay + 400);
+          pendingTimers.current.push(flagId);
         }
       }
     }
-  }, [scheduleUnlock]);
+  }, [addLog, scheduleUnlock, testMode]);
 
   const handleTurnLeft = useCallback(() => {
     if (!player) return;
@@ -102,26 +190,29 @@ export function usePlayerState(dungeon: DungeonMap | null) {
   }, [player]);
 
   const handleMoveForward = useCallback(() => {
-    if (!player || !dungeon) return;
+    if (!player || !dungeon || isRunEndedRef.current) return;
     const [nx, ny] = moveForward(dungeon, player.x, player.y, player.dir);
     setPlayer((p) => p && { ...p, x: nx, y: ny });
     onPlayerMoved(nx, ny, player.x, player.y);
   }, [player, dungeon, onPlayerMoved]);
 
   const handleMoveBackward = useCallback(() => {
-    if (!player || !dungeon) return;
+    if (!player || !dungeon || isRunEndedRef.current) return;
     const [nx, ny] = moveBackward(dungeon, player.x, player.y, player.dir);
     setPlayer((p) => p && { ...p, x: nx, y: ny });
     onPlayerMoved(nx, ny, player.x, player.y);
   }, [player, dungeon, onPlayerMoved]);
 
-  const clearEvent = useCallback(() => setLastEvent(null), []);
-
   return {
     player,
     visited,
-    lastEvent,
-    clearEvent,
+    eventLog,
+    food,
+    scrap,
+    stepCount,
+    isRunEnded,
+    characterChanges,
+    hasReturnFlag,
     initPlayer,
     handleTurnLeft,
     handleTurnRight,
