@@ -61,6 +61,12 @@ function pickRandom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
+// ─── TEST MODE ────────────────────────────────────────────────
+// true  → 全員ランダム投票・全員weight=1・リーダー/反発無効
+// false → 通常ロジック（personality固定・leader weight=2・反発あり）
+const TEST_MODE = true;
+// ─────────────────────────────────────────────────────────────
+
 export function triggerEvent(type: "resource" | "enemy"): GameEvent {
   return { type, message: EVENT_MESSAGES[type] };
 }
@@ -79,32 +85,45 @@ export function getDebateSequence(): Array<{ message: string; delay: number }> {
   ];
 
   const sequence = TEAM.map((member, i) => {
-    // Step 1: determine base vote from personality
-    const voteKey = PERSONALITY_VOTE[member.personality];
-    let vote: Vote = voteKey === "random" ? pickRandom(VOTE_OPTIONS) : voteKey;
-
-    // Step 2: rebellion — 50% chance to defy the leader if dislikesLeader is set
+    let vote: Vote;
+    let weight: number;
     let rebelled = false;
-    if (member.dislikesLeader && leaderVote && Math.random() < 0.5) {
-      const opposite: Vote =
-        leaderVote === "fight"  ? "escape" :
-        leaderVote === "escape" ? "fight"  :
-        pickRandom(["fight", "escape"] as Vote[]);
-      vote = opposite;
-      rebelled = true;
+
+    if (TEST_MODE) {
+      // テストモード：全員ランダム・全員weight=1・リーダー/反発無効
+      vote = pickRandom(VOTE_OPTIONS);
+      weight = 1;
+    } else {
+      // 通常ロジック
+      // Step 1: personality に基づく投票
+      const voteKey = PERSONALITY_VOTE[member.personality];
+      vote = voteKey === "random" ? pickRandom(VOTE_OPTIONS) : voteKey;
+
+      // Step 2: 反発処理
+      if (member.dislikesLeader && leaderVote && Math.random() < 0.5) {
+        const opposite: Vote =
+          leaderVote === "fight"  ? "escape" :
+          leaderVote === "escape" ? "fight"  :
+          pickRandom(["fight", "escape"] as Vote[]);
+        vote = opposite;
+        rebelled = true;
+      }
+
+      // Step 3: リーダーは2票
+      weight = member.isLeader ? 2 : 1;
     }
 
-    // Step 3: leader counts as 2 votes, others as 1
-    const weight = member.isLeader ? 2 : 1;
     votes[vote] += weight;
     if (member.isLeader) leaderVote = vote;
 
-    // Step 4: build display text
-    const label = member.isLeader ? `${member.name}（リーダー）` : member.name;
-    let messageText: string;
+    // 表示テキスト
+    const label = TEST_MODE
+      ? member.name
+      : member.isLeader ? `${member.name}（リーダー）` : member.name;
 
-    if (member.personality === "chaotic") {
-      // カイは常に投票内容を直接表示（デバッグ枠）
+    let messageText: string;
+    if (TEST_MODE || member.personality === "chaotic") {
+      // テストモード or カイ → 投票内容を直接表示
       messageText = `${label}：「（DEBUG）${vote} を選択」`;
     } else {
       const opinion = pickRandom(VOTE_OPINIONS[vote]);
@@ -112,7 +131,7 @@ export function getDebateSequence(): Array<{ message: string; delay: number }> {
       messageText = `${label}：「${opinion}」${suffix}`;
     }
 
-    console.log({ name: member.name, isLeader: member.isLeader, dislikesLeader: member.dislikesLeader, vote, weight, rebelled });
+    console.log({ name: member.name, vote, weight, rebelled: TEST_MODE ? "N/A(test)" : rebelled });
 
     return {
       message: messageText,
