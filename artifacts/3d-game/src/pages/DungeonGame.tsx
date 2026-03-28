@@ -10,7 +10,7 @@ export default function DungeonGame() {
   const [phase, setPhase] = useState<GamePhase>("start");
   const [dungeon, setDungeon] = useState<DungeonMap | null>(null);
   const [testMode, setTestMode] = useState(false);
-  const { player, visited, eventLog, food, hasReturnFlag, initPlayer, handleTurnLeft, handleTurnRight, handleMoveForward, handleMoveBackward } =
+  const { player, visited, eventLog, food, stepCount, isRunEnded, hasReturnFlag, initPlayer, handleTurnLeft, handleTurnRight, handleMoveForward, handleMoveBackward } =
     usePlayerState(dungeon, testMode);
 
   const [minimapOpen, setMinimapOpen] = useState(true);
@@ -166,6 +166,29 @@ export default function DungeonGame() {
               <button style={styles.mobileBtn} onPointerDown={handleTurnRight}>→</button>
             </div>
           </div>
+
+          {isRunEnded && (
+            <div style={styles.resultOverlay}>
+              <div style={styles.resultBox}>
+                <div style={styles.resultTitle}>帰　還</div>
+                <div style={styles.resultDivider} />
+                <div style={styles.resultStats}>
+                  <div style={styles.resultRow}>
+                    <span style={styles.resultLabel}>到達歩数</span>
+                    <span style={styles.resultValue}>{stepCount} 歩</span>
+                  </div>
+                  <div style={styles.resultRow}>
+                    <span style={styles.resultLabel}>残り食料</span>
+                    <span style={styles.resultValue}>{food}</span>
+                  </div>
+                </div>
+                <div style={styles.resultDivider} />
+                <button style={styles.resultBtn} onClick={startGame}>
+                  もう一度探索する
+                </button>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>
@@ -318,6 +341,73 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: "'Courier New', monospace",
     borderRadius: 2,
     boxShadow: "0 0 8px rgba(224,128,48,0.35)",
+  },
+  resultOverlay: {
+    position: "absolute",
+    inset: 0,
+    background: "rgba(4,3,2,0.88)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 100,
+  },
+  resultBox: {
+    background: "#13100d",
+    border: "1px solid #4a3a28",
+    borderRadius: 4,
+    padding: "44px 60px",
+    minWidth: 320,
+    textAlign: "center",
+    fontFamily: "'Courier New', monospace",
+    boxShadow: "0 0 80px rgba(255,136,51,0.12)",
+  },
+  resultTitle: {
+    color: "#f0c060",
+    fontSize: 40,
+    letterSpacing: 10,
+    fontWeight: 700,
+    textShadow: "0 0 24px rgba(240,192,96,0.5)",
+    marginBottom: 4,
+  },
+  resultDivider: {
+    height: 1,
+    background: "#3a2a1a",
+    margin: "20px 0",
+  },
+  resultStats: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
+  },
+  resultRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "baseline",
+    gap: 32,
+  },
+  resultLabel: {
+    color: "#7a6040",
+    fontSize: 13,
+    letterSpacing: 2,
+  },
+  resultValue: {
+    color: "#d4a050",
+    fontSize: 22,
+    letterSpacing: 1,
+    fontWeight: 700,
+  },
+  resultBtn: {
+    marginTop: 4,
+    background: "rgba(30,15,5,0.8)",
+    border: "1px solid #c8a060",
+    color: "#c8a060",
+    padding: "10px 28px",
+    cursor: "pointer",
+    fontFamily: "'Courier New', monospace",
+    fontSize: 13,
+    borderRadius: 2,
+    letterSpacing: 2,
+    width: "100%",
   },
   hudRight: {
     pointerEvents: "auto",

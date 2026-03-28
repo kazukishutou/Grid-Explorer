@@ -38,10 +38,13 @@ export function usePlayerState(dungeon: DungeonMap | null, testMode: boolean) {
   const [eventLog, setEventLog] = useState<Array<{ message: string; color?: string }>>([]);
   const [food, setFood] = useState(FOOD_INITIAL);
   const [hasReturnFlag, setHasReturnFlag] = useState(false);
+  const [stepCount, setStepCount] = useState(0);
+  const [isRunEnded, setIsRunEnded] = useState(false);
 
   const pendingTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const isEventRunning = useRef(false);
   const foodRef = useRef(FOOD_INITIAL);
+  const isRunEndedRef = useRef(false);
 
   const clearPendingTimers = useCallback(() => {
     pendingTimers.current.forEach(clearTimeout);
@@ -63,21 +66,28 @@ export function usePlayerState(dungeon: DungeonMap | null, testMode: boolean) {
     clearPendingTimers();
     isEventRunning.current = false;
     foodRef.current = FOOD_INITIAL;
+    isRunEndedRef.current = false;
     const v = createVisitedGrid(d.width, d.height);
     v[d.startY][d.startX] = true;
     setVisited(v);
     setEventLog([]);
     setFood(FOOD_INITIAL);
     setHasReturnFlag(false);
+    setStepCount(0);
+    setIsRunEnded(false);
     setPlayer({ x: d.startX, y: d.startY, dir: d.startDir });
   }, [clearPendingTimers]);
 
   const onPlayerMoved = useCallback((nx: number, ny: number, prevX: number, prevY: number) => {
+    if (isRunEndedRef.current) return;
+
     setVisited((v) => markVisited(v, nx, ny));
 
     if (isEventRunning.current) return;
 
     if (nx !== prevX || ny !== prevY) {
+      setStepCount((s) => s + 1);
+
       const event = checkForEvent(0.15);
 
       if (event) {
@@ -118,6 +128,12 @@ export function usePlayerState(dungeon: DungeonMap | null, testMode: boolean) {
         const lastRDelay = rSeq[rSeq.length - 1].delay;
         scheduleUnlock(lastRDelay + POST_EVENT_UNLOCK_MS);
         if (decision === "return") {
+          const flagId = setTimeout(() => {
+            isRunEndedRef.current = true;
+            setIsRunEnded(true);
+          }, lastRDelay + 400);
+          pendingTimers.current.push(flagId);
+        } else {
           const flagId = setTimeout(() => setHasReturnFlag(true), lastRDelay + 400);
           pendingTimers.current.push(flagId);
         }
@@ -136,14 +152,14 @@ export function usePlayerState(dungeon: DungeonMap | null, testMode: boolean) {
   }, [player]);
 
   const handleMoveForward = useCallback(() => {
-    if (!player || !dungeon) return;
+    if (!player || !dungeon || isRunEndedRef.current) return;
     const [nx, ny] = moveForward(dungeon, player.x, player.y, player.dir);
     setPlayer((p) => p && { ...p, x: nx, y: ny });
     onPlayerMoved(nx, ny, player.x, player.y);
   }, [player, dungeon, onPlayerMoved]);
 
   const handleMoveBackward = useCallback(() => {
-    if (!player || !dungeon) return;
+    if (!player || !dungeon || isRunEndedRef.current) return;
     const [nx, ny] = moveBackward(dungeon, player.x, player.y, player.dir);
     setPlayer((p) => p && { ...p, x: nx, y: ny });
     onPlayerMoved(nx, ny, player.x, player.y);
@@ -154,6 +170,8 @@ export function usePlayerState(dungeon: DungeonMap | null, testMode: boolean) {
     visited,
     eventLog,
     food,
+    stepCount,
+    isRunEnded,
     hasReturnFlag,
     initPlayer,
     handleTurnLeft,
