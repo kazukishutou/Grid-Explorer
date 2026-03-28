@@ -5,6 +5,20 @@ import DungeonRenderer from "../game/DungeonRenderer";
 import Minimap from "../game/Minimap";
 
 type GamePhase = "start" | "playing";
+type AppMode = "dungeon" | "commune";
+
+interface CharStat {
+  name: string;
+  stress: number;
+  morale: number;
+}
+
+const INITIAL_CHAR_STATS: CharStat[] = [
+  { name: "アレス", stress: 0, morale: 0 },
+  { name: "セイラ", stress: 0, morale: 0 },
+  { name: "レン",   stress: 0, morale: 0 },
+  { name: "カイ",   stress: 0, morale: 0 },
+];
 
 export default function DungeonGame() {
   const [phase, setPhase] = useState<GamePhase>("start");
@@ -14,6 +28,8 @@ export default function DungeonGame() {
     usePlayerState(dungeon, testMode);
 
   const [minimapOpen, setMinimapOpen] = useState(true);
+  const [appMode, setAppMode] = useState<AppMode>("dungeon");
+  const [charStats, setCharStats] = useState<CharStat[]>(INITIAL_CHAR_STATS);
   const lastKeyTime = useRef<number>(0);
   const logEndRef = useRef<HTMLDivElement>(null);
 
@@ -22,11 +38,28 @@ export default function DungeonGame() {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [eventLog]);
 
+  // Apply run results to persistent character stats
+  useEffect(() => {
+    if (characterChanges.length === 0) return;
+    setCharStats((prev) =>
+      prev.map((stat) => {
+        const change = characterChanges.find((c) => c.name === stat.name);
+        if (!change) return stat;
+        return {
+          ...stat,
+          stress: stat.stress + change.stressDelta,
+          morale: stat.morale + change.moraleDelta,
+        };
+      })
+    );
+  }, [characterChanges]);
+
   const startGame = useCallback(() => {
     const d = generateDungeon(21, 21);
     setDungeon(d);
     initPlayer(d);
     setPhase("playing");
+    setAppMode("dungeon");
   }, [initPlayer]);
 
   useEffect(() => {
@@ -66,6 +99,35 @@ export default function DungeonGame() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [phase, handleMoveForward, handleMoveBackward, handleTurnLeft, handleTurnRight]);
+
+  if (appMode === "commune") {
+    return (
+      <div style={styles.communeScreen}>
+        <div style={styles.communePanel}>
+          <div style={styles.communeHeader}>
+            <div style={styles.communeTitle}>COMMUNE</div>
+            <div style={styles.communeSubtitle}>拠　点</div>
+          </div>
+          <div style={styles.communeDivider} />
+          <div style={styles.charList}>
+            {charStats.map((c) => (
+              <div key={c.name} style={styles.charCard}>
+                <div style={styles.charCardName}>{c.name}</div>
+                <div style={styles.charCardStats}>
+                  <span style={styles.charCardStress}>ストレス　{c.stress}</span>
+                  <span style={styles.charCardMorale}>モラル　{c.morale}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={styles.communeDivider} />
+          <button style={styles.communeExploreBtn} onClick={startGame}>
+            探索に出る
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (phase === "start") {
     return (
@@ -209,9 +271,14 @@ export default function DungeonGame() {
                   </>
                 )}
                 <div style={styles.resultDivider} />
-                <button style={styles.resultBtn} onClick={startGame}>
-                  もう一度探索する
-                </button>
+                <div style={styles.resultBtnGroup}>
+                  <button style={styles.resultBtn} onClick={startGame}>
+                    もう一度探索する
+                  </button>
+                  <button style={{ ...styles.resultBtn, ...styles.resultBtnCommune }} onClick={() => setAppMode("commune")}>
+                    コミューンへ
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -471,6 +538,102 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#c8c8a0",
     fontSize: 12,
     letterSpacing: 1,
+  },
+  resultBtnGroup: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+    marginTop: 4,
+  },
+  resultBtnCommune: {
+    background: "rgba(10,25,35,0.85)",
+    border: "1px solid #4499bb",
+    color: "#4499bb",
+  },
+  communeScreen: {
+    width: "100vw",
+    height: "100vh",
+    background: "#060a0d",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontFamily: "'Courier New', Courier, monospace",
+  },
+  communePanel: {
+    background: "#0c1218",
+    border: "1px solid #1e3a4a",
+    borderRadius: 4,
+    padding: "44px 60px",
+    minWidth: 360,
+    boxShadow: "0 0 60px rgba(40,120,180,0.10)",
+  },
+  communeHeader: {
+    textAlign: "center",
+    marginBottom: 4,
+  },
+  communeTitle: {
+    color: "#60b8d8",
+    fontSize: 40,
+    letterSpacing: 10,
+    fontWeight: 700,
+    textShadow: "0 0 24px rgba(96,184,216,0.4)",
+  },
+  communeSubtitle: {
+    color: "#2a5a70",
+    fontSize: 12,
+    letterSpacing: 4,
+    marginTop: 6,
+  },
+  communeDivider: {
+    height: 1,
+    background: "#1e3a4a",
+    margin: "20px 0",
+  },
+  charList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+  },
+  charCard: {
+    background: "#0a1520",
+    border: "1px solid #1a2e3a",
+    borderRadius: 3,
+    padding: "12px 16px",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  charCardName: {
+    color: "#80a8b8",
+    fontSize: 14,
+    letterSpacing: 2,
+    minWidth: 56,
+  },
+  charCardStats: {
+    display: "flex",
+    gap: 20,
+  },
+  charCardStress: {
+    color: "#cc7755",
+    fontSize: 12,
+    letterSpacing: 1,
+  },
+  charCardMorale: {
+    color: "#55cc88",
+    fontSize: 12,
+    letterSpacing: 1,
+  },
+  communeExploreBtn: {
+    background: "rgba(5,15,25,0.8)",
+    border: "1px solid #4499bb",
+    color: "#4499bb",
+    padding: "10px 28px",
+    cursor: "pointer",
+    fontFamily: "'Courier New', monospace",
+    fontSize: 13,
+    borderRadius: 2,
+    letterSpacing: 2,
+    width: "100%",
   },
   hudRight: {
     pointerEvents: "auto",
