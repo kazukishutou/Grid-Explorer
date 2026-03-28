@@ -24,13 +24,7 @@ const TEAM: TeamMember[] = [
   { name: "レン",   personality: "neutral"    },
 ];
 
-const PERSONALITY_OPINIONS: Record<Personality, string[]> = {
-  aggressive: ["戦うべきだ！", "ここで退くわけにはいかない！", "相手は弱そうだ、やれる！"],
-  cautious:   ["危険だ、逃げよう", "無理はしないほうがいい…", "今は引くべきだ"],
-  neutral:    ["戦うべきだ！", "逃げよう", "様子を見るべきだ"],
-};
-
-// Each personality maps to a fixed vote, or "random" for neutral
+// Personality → the vote it always casts ("random" for neutral)
 const PERSONALITY_VOTE: Record<Personality, Vote | "random"> = {
   aggressive: "fight",
   cautious:   "escape",
@@ -39,7 +33,14 @@ const PERSONALITY_VOTE: Record<Personality, Vote | "random"> = {
 
 const VOTE_OPTIONS: Vote[] = ["fight", "escape", "wait"];
 
-// Vote label → display text and outcome messages
+// Vote → display texts that match that vote (used for ALL members)
+// This guarantees the spoken line always matches the actual vote cast.
+const VOTE_OPINIONS: Record<Vote, string[]> = {
+  fight:  ["戦うべきだ！", "ここで退くわけにはいかない！", "相手は弱そうだ、やれる！"],
+  escape: ["危険だ、逃げよう", "無理はしないほうがいい…", "今は引くべきだ"],
+  wait:   ["様子を見るべきだ", "じっと見守ろう", "急ぐことはない"],
+};
+
 const VOTE_TO_RESULT: Record<Vote, string> = {
   fight:  "戦闘開始",
   escape: "逃走",
@@ -64,25 +65,35 @@ export function triggerEvent(type: "resource" | "enemy"): GameEvent {
 export function getDebateSequence(): Array<{ message: string; delay: number }> {
   const votes: Record<Vote, number> = { fight: 0, escape: 0, wait: 0 };
 
-  // Each member speaks once and casts a vote aligned with their personality
   const sequence = TEAM.map((member, i) => {
+    // Step 1: determine the vote
     const voteKey = PERSONALITY_VOTE[member.personality];
     const vote: Vote = voteKey === "random" ? pickRandom(VOTE_OPTIONS) : voteKey;
+
+    // Step 2: count the vote
     votes[vote]++;
 
-    const opinion = pickRandom(PERSONALITY_OPINIONS[member.personality]);
+    // Step 3: pick a display text that matches the SAME vote (never independent)
+    const opinion = pickRandom(VOTE_OPINIONS[vote]);
+
+    console.log({ name: member.name, personality: member.personality, vote, opinion });
+
     return {
       message: `${member.name}：「${opinion}」`,
       delay: 800 + i * 700,
     };
   });
 
-  // Determine winner by vote count; break ties randomly
+  console.log("votes:", votes);
+
+  // Determine winner — most votes wins; ties broken randomly
   const entries = Object.entries(votes) as [Vote, number][];
   const maxCount = Math.max(...entries.map(([, n]) => n));
   const winners = entries.filter(([, n]) => n === maxCount).map(([v]) => v);
   const winningVote = pickRandom(winners);
   const result = VOTE_TO_RESULT[winningVote];
+
+  console.log("winning vote:", winningVote, "→ result:", result);
 
   const conclusionDelay = 800 + TEAM.length * 700;
   sequence.push({ message: `→ 結論：${result}`, delay: conclusionDelay });
