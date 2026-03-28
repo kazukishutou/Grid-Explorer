@@ -1,5 +1,8 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
+import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
+import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
+import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { DungeonMap, PlayerState } from "./dungeon";
 
 interface Props {
@@ -17,13 +20,6 @@ const DIR_ANGLES = [0, -Math.PI / 2, Math.PI, Math.PI / 2];
 const DIR_BACK_X = [0, -1, 0, 1];
 const DIR_BACK_Z = [1,  0, -1, 0];
 
-// Depth render target resolution (smaller = faster readback)
-const DEPTH_SIZE = 256;
-// NDC z tolerance: positive = allow surface to be this much "behind" stored depth.
-// Must be large enough to pass when the segment IS the visible surface,
-// and small enough to block segments truly behind another wall.
-const DEPTH_EPS = 0.025;
-
 let lastPlayerKey = "";
 let stepStart = 0;
 let stepFromX = 0, stepFromZ = 0;
@@ -40,27 +36,8 @@ function needsVert(dungeon: DungeonMap, lx: number, ly: number, dx: number, dy: 
   return !(!isWall(dungeon, lx, ly) && isWall(dungeon, dx, dy));
 }
 
-// Depth-encoding shader: packs NDC z [-1,1] into RG channels (16-bit precision)
-const DEPTH_VERT = `
-  varying float vNDCz;
-  void main() {
-    vec4 pos = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    gl_Position = pos;
-    vNDCz = pos.z / pos.w;
-  }
-`;
-const DEPTH_FRAG = `
-  varying float vNDCz;
-  void main() {
-    float d = clamp(vNDCz * 0.5 + 0.5, 0.0, 1.0);
-    float hi = floor(d * 255.0) / 255.0;
-    float lo = fract(d * 255.0);
-    gl_FragColor = vec4(hi, lo, 0.0, 1.0);
-  }
-`;
-
-// Pre-compute all 3D line segment endpoints as a flat Float32Array [x1,y1,z1, x2,y2,z2, ...]
-function buildSegments(dungeon: DungeonMap): Float32Array {
+// Build flat position array [x1,y1,z1, x2,y2,z2, ...] for LineSegmentsGeometry
+function buildPositions(dungeon: DungeonMap): number[] {
   const list: number[] = [];
   const seg = (x1: number, y1: number, z1: number, x2: number, y2: number, z2: number) =>
     list.push(x1, y1, z1, x2, y2, z2);
@@ -100,10 +77,10 @@ function buildSegments(dungeon: DungeonMap): Float32Array {
       }
     }
   }
-  return new Float32Array(list);
+  return list;
 }
 
-// Black occluder geometry only — no green line meshes
+// Black occluder geometry (walls, floor, ceiling) — provides proper Z-buffer occlusion
 function buildOccluderScene(dungeon: DungeonMap): THREE.Group {
   const group = new THREE.Group();
   const mat = new THREE.MeshBasicMaterial({ color: BLACK });
@@ -137,41 +114,37 @@ export default function DungeonRenderer({ dungeon, player }: Props) {
     const mount = mountRef.current;
     if (!mount) return;
 
-    const dpr = window.devicePixelRatio;
     let w = mount.clientWidth;
     let h = mount.clientHeight;
 
-    // --- WebGL renderer (occluder geometry + depth pass) ---
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(w, h);
-    renderer.setPixelRatio(dpr);
+    renderer.setPixelRatio(window.devicePixelRatio);
     Object.assign(renderer.domElement.style, { position: "absolute", top: "0", left: "0" });
     mount.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(BLACK);
     scene.fog = new THREE.Fog(BLACK, 12, 32);
+
+    // Black occluder geometry writes to the Z-buffer and blocks lines behind walls
     scene.add(buildOccluderScene(dungeon));
 
+    // LineMaterial: linewidth is in CSS pixels, constant regardless of perspective.
+    // depthTest: true (default) — lines behind occluder geometry are hidden by Z-buffer.
+    // fog: true — lines fade with distance like the black walls.
+    const lineMat = new LineMaterial({
+      color: 0x00dd44,
+      linewidth: 1.5,
+      fog: true,
+      resolution: new THREE.Vector2(w, h),
+    });
+    const lineGeo = new LineSegmentsGeometry();
+    lineGeo.setPositions(buildPositions(dungeon));
+    const lines = new LineSegments2(lineGeo, lineMat);
+    scene.add(lines);
+
     const camera = new THREE.PerspectiveCamera(88, w / h, 0.1, 100);
-
-    // Depth render target (256×256) + shader + pixel buffer
-    const depthTarget = new THREE.WebGLRenderTarget(DEPTH_SIZE, DEPTH_SIZE);
-    const depthMat = new THREE.ShaderMaterial({ vertexShader: DEPTH_VERT, fragmentShader: DEPTH_FRAG });
-    const depthPx = new Uint8Array(DEPTH_SIZE * DEPTH_SIZE * 4);
-
-    // --- 2D canvas overlay (fixed-width lines) ---
-    const cv = document.createElement("canvas");
-    Object.assign(cv.style, { position: "absolute", top: "0", left: "0", pointerEvents: "none" });
-    cv.width = Math.round(w * dpr);
-    cv.height = Math.round(h * dpr);
-    cv.style.width = w + "px";
-    cv.style.height = h + "px";
-    mount.appendChild(cv);
-    const ctx = cv.getContext("2d")!;
-
-    const segs = buildSegments(dungeon);
-    const nSegs = segs.length / 6;
 
     // Initial camera position
     const sd = dungeon.startDir;
@@ -184,39 +157,9 @@ export default function DungeonRenderer({ dungeon, player }: Props) {
     stepFromAngle = DIR_ANGLES[sd]; stepToAngle = DIR_ANGLES[sd];
     isAnimating = false;
 
-    const _v = new THREE.Vector3();
-    const _c = new THREE.Vector3();
-
-    // Project world point → canvas pixel coords + NDC values.
-    // Returns null if behind the camera near-plane.
-    function proj(x: number, y: number, z: number) {
-      _c.set(x, y, z).applyMatrix4(camera.matrixWorldInverse);
-      if (_c.z >= -camera.near) return null; // behind or at near plane
-      _v.set(x, y, z).project(camera);
-      return {
-        sx: (_v.x * 0.5 + 0.5) * cv.width,
-        sy: (0.5 - _v.y * 0.5) * cv.height,
-        nx: _v.x,
-        ny: _v.y,
-        nz: _v.z,
-      };
-    }
-
-    // Decode stored NDC z from the depth render target at NDC position (nx, ny).
-    // WebGL readPixels is bottom-left origin, matching NDC y convention.
-    function depthAt(nx: number, ny: number): number {
-      const ix = Math.min(Math.max(Math.floor((nx + 1) * 0.5 * DEPTH_SIZE), 0), DEPTH_SIZE - 1);
-      const iy = Math.min(Math.max(Math.floor((ny + 1) * 0.5 * DEPTH_SIZE), 0), DEPTH_SIZE - 1);
-      const b = (iy * DEPTH_SIZE + ix) * 4;
-      // Decode 16-bit depth from RG channels
-      const d = depthPx[b] / 255 + depthPx[b + 1] / 255 / 255;
-      return d * 2 - 1; // back to NDC z range [-1, 1]
-    }
-
     const animate = () => {
       rafRef.current = requestAnimationFrame(animate);
 
-      // Camera animation
       const p = playerRef.current;
       const key = `${p.x},${p.y},${p.dir}`;
       if (key !== lastPlayerKey) {
@@ -234,6 +177,7 @@ export default function DungeonRenderer({ dungeon, player }: Props) {
         isAnimating = true;
         lastPlayerKey = key;
       }
+
       if (isAnimating) {
         const t = Math.min((performance.now() - stepStart) / STEP_DURATION, 1);
         const e = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
@@ -242,42 +186,8 @@ export default function DungeonRenderer({ dungeon, player }: Props) {
         camera.rotation.y = stepFromAngle + (stepToAngle - stepFromAngle) * e;
         if (t >= 1) isAnimating = false;
       }
-      camera.updateMatrixWorld();
 
-      // Pass 1: render depth into small render target
-      scene.overrideMaterial = depthMat;
-      renderer.setRenderTarget(depthTarget);
       renderer.render(scene, camera);
-      renderer.setRenderTarget(null);
-      scene.overrideMaterial = null;
-      renderer.readRenderTargetPixels(depthTarget, 0, 0, DEPTH_SIZE, DEPTH_SIZE, depthPx);
-
-      // Pass 2: main render (black occluder geometry to screen)
-      renderer.render(scene, camera);
-
-      // Pass 3: 2D fixed-width line overlay
-      ctx.clearRect(0, 0, cv.width, cv.height);
-      ctx.strokeStyle = "#00dd44";
-      ctx.lineWidth = 1.5;
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-      ctx.beginPath();
-
-      for (let i = 0; i < nSegs; i++) {
-        const b = i * 6;
-        const pA = proj(segs[b], segs[b + 1], segs[b + 2]);
-        if (!pA) continue;
-        const pB = proj(segs[b + 3], segs[b + 4], segs[b + 5]);
-        if (!pB) continue;
-
-        // Depth occlusion: skip if a closer surface is in front of either endpoint
-        if (depthAt(pA.nx, pA.ny) < pA.nz - DEPTH_EPS) continue;
-        if (depthAt(pB.nx, pB.ny) < pB.nz - DEPTH_EPS) continue;
-
-        ctx.moveTo(pA.sx, pA.sy);
-        ctx.lineTo(pB.sx, pB.sy);
-      }
-      ctx.stroke();
     };
     animate();
 
@@ -286,8 +196,7 @@ export default function DungeonRenderer({ dungeon, player }: Props) {
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
-      cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
-      cv.style.width = w + "px"; cv.style.height = h + "px";
+      lineMat.resolution.set(w, h);
     };
     window.addEventListener("resize", onResize);
 
@@ -295,9 +204,9 @@ export default function DungeonRenderer({ dungeon, player }: Props) {
       cancelAnimationFrame(rafRef.current);
       window.removeEventListener("resize", onResize);
       renderer.dispose();
-      depthTarget.dispose();
+      lineGeo.dispose();
+      lineMat.dispose();
       mount.removeChild(renderer.domElement);
-      mount.removeChild(cv);
     };
   }, [dungeon]);
 
