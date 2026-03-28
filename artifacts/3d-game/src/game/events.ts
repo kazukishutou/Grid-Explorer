@@ -1,4 +1,4 @@
-export type EventType = "resource";
+export type EventType = "resource" | "enemy";
 
 export interface GameEvent {
   type: EventType;
@@ -7,6 +7,7 @@ export interface GameEvent {
 
 const EVENT_MESSAGES: Record<EventType, string> = {
   resource: "資源を発見した！",
+  enemy: "敵と遭遇した！",
 };
 
 export function triggerEvent(type: EventType): GameEvent {
@@ -15,7 +16,12 @@ export function triggerEvent(type: EventType): GameEvent {
 
 export function checkForEvent(probability = 0.15): GameEvent | null {
   if (Math.random() < probability) {
-    return triggerEvent("resource");
+    const roll = Math.random();
+    if (roll < 0.6) {
+      return triggerEvent("resource");
+    } else {
+      return triggerEvent("enemy");
+    }
   }
   return null;
 }
