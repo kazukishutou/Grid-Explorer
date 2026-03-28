@@ -1,13 +1,29 @@
 export type Cell = 0 | 1;
 export type Direction = 0 | 1 | 2 | 3;
 
+export interface WallInfo {
+  north: boolean;
+  south: boolean;
+  east: boolean;
+  west: boolean;
+}
+
+export interface TileData {
+  walls: WallInfo;
+}
+
 export interface DungeonMap {
   width: number;
   height: number;
   grid: Cell[][];
+  tiles: TileData[][];
   startX: number;
   startY: number;
   startDir: Direction;
+}
+
+export function createVisitedGrid(width: number, height: number): boolean[][] {
+  return Array.from({ length: height }, () => Array(width).fill(false));
 }
 
 const DIRS: [number, number][] = [
@@ -52,10 +68,25 @@ export function generateDungeon(width = 21, height = 21): DungeonMap {
 
   const [px, py] = openCells[Math.floor(Math.random() * openCells.length)];
 
+  const isWallCell = (x: number, y: number) =>
+    x < 0 || x >= width || y < 0 || y >= height || grid[y][x] === 1;
+
+  const tiles: TileData[][] = Array.from({ length: height }, (_, y) =>
+    Array.from({ length: width }, (_, x) => ({
+      walls: {
+        north: isWallCell(x, y - 1),
+        south: isWallCell(x, y + 1),
+        east:  isWallCell(x + 1, y),
+        west:  isWallCell(x - 1, y),
+      },
+    }))
+  );
+
   return {
     width,
     height,
     grid,
+    tiles,
     startX: px,
     startY: py,
     startDir: Math.floor(Math.random() * 4) as Direction,
