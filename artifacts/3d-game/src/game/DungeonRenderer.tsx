@@ -24,6 +24,14 @@ let isAnimating = false;
 
 const DIR_ANGLES = [0, -Math.PI / 2, Math.PI, Math.PI / 2];
 
+// How far behind the cell centre the camera sits (towards where the player came from).
+// This increases the distance to the front wall so ceiling/floor become visible.
+const CAM_BACK = 0.75;
+// Backward (opposite of facing) unit vector per direction: N=0, E=1, S=2, W=3
+// N faces -Z → backward is +Z; E faces +X → backward is -X; etc.
+const DIR_BACK_X = [0, -1, 0, 1];
+const DIR_BACK_Z = [1,  0, -1, 0];
+
 function isWall(dungeon: DungeonMap, x: number, y: number): boolean {
   if (x < 0 || y < 0 || x >= dungeon.width || y >= dungeon.height) return true;
   return dungeon.grid[y][x] === 1;
@@ -196,16 +204,17 @@ export default function DungeonRenderer({ dungeon, player }: Props) {
     scene.background = new THREE.Color(BLACK);
     scene.fog = new THREE.Fog(BLACK, 12, 32);
 
-    const camera = new THREE.PerspectiveCamera(65, w / h, 0.1, 100);
+    const camera = new THREE.PerspectiveCamera(110, w / h, 0.1, 100);
     scene.add(camera);
 
     scene.add(buildScene(dungeon));
 
-    const px = dungeon.startX * CELL_SIZE;
-    const pz = dungeon.startY * CELL_SIZE;
+    const sd = dungeon.startDir;
+    const px = dungeon.startX * CELL_SIZE + DIR_BACK_X[sd] * CAM_BACK;
+    const pz = dungeon.startY * CELL_SIZE + DIR_BACK_Z[sd] * CAM_BACK;
     camera.position.set(px, WALL_HEIGHT * 0.45, pz);
-    camera.rotation.y = DIR_ANGLES[dungeon.startDir];
-    lastPlayerKey = `${dungeon.startX},${dungeon.startY},${dungeon.startDir}`;
+    camera.rotation.y = DIR_ANGLES[sd];
+    lastPlayerKey = `${dungeon.startX},${dungeon.startY},${sd}`;
     stepFromX = px; stepFromZ = pz;
     stepToX = px; stepToZ = pz;
     stepFromAngle = DIR_ANGLES[dungeon.startDir];
@@ -217,8 +226,8 @@ export default function DungeonRenderer({ dungeon, player }: Props) {
       const p = playerRef.current;
       const key = `${p.x},${p.y},${p.dir}`;
       if (key !== lastPlayerKey) {
-        const tx = p.x * CELL_SIZE;
-        const tz = p.y * CELL_SIZE;
+        const tx = p.x * CELL_SIZE + DIR_BACK_X[p.dir] * CAM_BACK;
+        const tz = p.y * CELL_SIZE + DIR_BACK_Z[p.dir] * CAM_BACK;
         stepFromX = camera.position.x;
         stepFromZ = camera.position.z;
         stepToX = tx;
