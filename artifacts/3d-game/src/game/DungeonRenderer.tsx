@@ -26,7 +26,7 @@ const DIR_ANGLES = [0, -Math.PI / 2, Math.PI, Math.PI / 2];
 
 // How far behind the cell centre the camera sits (towards where the player came from).
 // This increases the distance to the front wall so ceiling/floor become visible.
-const CAM_BACK = 0.38;
+const CAM_BACK = 0.48;
 // Backward (opposite of facing) unit vector per direction: N=0, E=1, S=2, W=3
 // N faces -Z → backward is +Z; E faces +X → backward is -X; etc.
 const DIR_BACK_X = [0, -1, 0, 1];
