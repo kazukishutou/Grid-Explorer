@@ -10,7 +10,7 @@ export default function DungeonGame() {
   const [phase, setPhase] = useState<GamePhase>("start");
   const [dungeon, setDungeon] = useState<DungeonMap | null>(null);
   const [testMode, setTestMode] = useState(false);
-  const { player, visited, eventLog, food, scrap, stepCount, isRunEnded, hasReturnFlag, initPlayer, handleTurnLeft, handleTurnRight, handleMoveForward, handleMoveBackward } =
+  const { player, visited, eventLog, food, scrap, stepCount, isRunEnded, characterChanges, hasReturnFlag, initPlayer, handleTurnLeft, handleTurnRight, handleMoveForward, handleMoveBackward } =
     usePlayerState(dungeon, testMode);
 
   const [minimapOpen, setMinimapOpen] = useState(true);
@@ -189,6 +189,25 @@ export default function DungeonGame() {
                     <span style={{ ...styles.resultValue, color: "#88ddff" }}>{scrap}</span>
                   </div>
                 </div>
+                {characterChanges.length > 0 && (
+                  <>
+                    <div style={styles.resultDivider} />
+                    <div style={styles.charChangesTitle}>── キャラクター変化 ──</div>
+                    <div style={styles.charChangesList}>
+                      {characterChanges.map((c) => {
+                        const parts: string[] = [];
+                        if (c.stressDelta > 0) parts.push(`ストレス +${c.stressDelta}`);
+                        if (c.moraleDelta > 0) parts.push(`モラル +${c.moraleDelta}`);
+                        return (
+                          <div key={c.name} style={styles.charChangeRow}>
+                            <span style={styles.charName}>{c.name}</span>
+                            <span style={styles.charDelta}>{parts.join("　")}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
                 <div style={styles.resultDivider} />
                 <button style={styles.resultBtn} onClick={startGame}>
                   もう一度探索する
@@ -422,6 +441,36 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 2,
     letterSpacing: 2,
     width: "100%",
+  },
+  charChangesTitle: {
+    color: "#7a6040",
+    fontSize: 11,
+    letterSpacing: 2,
+    fontFamily: "'Courier New', monospace",
+    marginBottom: 10,
+  },
+  charChangesList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+    textAlign: "left",
+  },
+  charChangeRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "baseline",
+    gap: 16,
+    fontFamily: "'Courier New', monospace",
+  },
+  charName: {
+    color: "#a08060",
+    fontSize: 13,
+    minWidth: 48,
+  },
+  charDelta: {
+    color: "#c8c8a0",
+    fontSize: 12,
+    letterSpacing: 1,
   },
   hudRight: {
     pointerEvents: "auto",

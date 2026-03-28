@@ -11,7 +11,7 @@ const EVENT_MESSAGES: Record<"resource" | "enemy", string> = {
 };
 
 type Personality = "aggressive" | "cautious" | "neutral" | "chaotic";
-type Vote = "fight" | "escape" | "wait";
+export type Vote = "fight" | "escape" | "wait";
 
 interface TeamMember {
   name: string;
@@ -84,12 +84,13 @@ export const VOTE_COLOR: Record<string, string> = {
   wait:   "#55ee88",
 };
 
-// Returns { sequence, foodCost, scrapGain } for an enemy encounter.
+// Returns { sequence, foodCost, scrapGain, outcome } for an enemy encounter.
 // testMode=true → 全員ランダム投票・全員weight=1・リーダー/反発無効・DEBUG表示
 export function getDebateSequence(testMode: boolean): {
   sequence: Array<{ message: string; color?: string; delay: number }>;
   foodCost: number;
   scrapGain: number;
+  outcome: Vote;
 } {
   const votes: Record<Vote, number> = { fight: 0, escape: 0, wait: 0 };
 
@@ -178,7 +179,7 @@ export function getDebateSequence(testMode: boolean): {
   const outcome = pickRandom(OUTCOME_MESSAGES[result]);
   sequence.push({ message: outcome, color: VOTE_COLOR[winningVote], delay: conclusionDelay + 900 });
 
-  return { sequence, foodCost: VOTE_FOOD_COST[winningVote], scrapGain: VOTE_SCRAP_GAIN[winningVote] };
+  return { sequence, foodCost: VOTE_FOOD_COST[winningVote], scrapGain: VOTE_SCRAP_GAIN[winningVote], outcome: winningVote };
 }
 
 export function checkForEvent(probability = 0.15): GameEvent | null {

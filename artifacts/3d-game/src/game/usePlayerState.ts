@@ -8,7 +8,21 @@ import {
   moveBackward,
   createVisitedGrid,
 } from "./dungeon";
-import { checkForEvent, getDebateSequence, getReturnDecisionSequence } from "./events";
+import { checkForEvent, getDebateSequence, getReturnDecisionSequence, Vote } from "./events";
+
+export interface CharChange {
+  name: string;
+  stressDelta: number;
+  moraleDelta: number;
+}
+
+// stressThreshold: 戦闘回数がこれ以上でストレス +1
+const CHAR_PROFILES: Array<{ name: string; stressThreshold: number }> = [
+  { name: "アレス", stressThreshold: 2 },
+  { name: "セイラ", stressThreshold: 5 },
+  { name: "レン",   stressThreshold: 3 },
+  { name: "カイ",   stressThreshold: 2 },
+];
 
 export interface PlayerState {
   x: number;
@@ -42,10 +56,13 @@ export function usePlayerState(dungeon: DungeonMap | null, testMode: boolean) {
   const [stepCount, setStepCount] = useState(0);
   const [isRunEnded, setIsRunEnded] = useState(false);
 
+  const [characterChanges, setCharacterChanges] = useState<CharChange[]>([]);
+
   const pendingTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const isEventRunning = useRef(false);
   const foodRef = useRef(FOOD_INITIAL);
   const isRunEndedRef = useRef(false);
+  const fightCountRef = useRef(0);
 
   const clearPendingTimers = useCallback(() => {
     pendingTimers.current.forEach(clearTimeout);
@@ -68,12 +85,14 @@ export function usePlayerState(dungeon: DungeonMap | null, testMode: boolean) {
     isEventRunning.current = false;
     foodRef.current = FOOD_INITIAL;
     isRunEndedRef.current = false;
+    fightCountRef.current = 0;
     const v = createVisitedGrid(d.width, d.height);
     v[d.startY][d.startX] = true;
     setVisited(v);
     setEventLog([]);
     setFood(FOOD_INITIAL);
     setScrap(0);
+    setCharacterChanges([]);
     setHasReturnFlag(false);
     setStepCount(0);
     setIsRunEnded(false);
@@ -98,7 +117,8 @@ export function usePlayerState(dungeon: DungeonMap | null, testMode: boolean) {
         addLog(event.message);
 
         if (event.type === "enemy") {
-          const { sequence, foodCost, scrapGain } = getDebateSequence(testMode);
+          const { sequence, foodCost, scrapGain, outcome } = getDebateSequence(testMode);
+          if (outcome === "fight") fightCountRef.current++;
           sequence.forEach(({ message, color, delay }) => {
             const id = setTimeout(() => addLog(message, color), delay);
             pendingTimers.current.push(id);
@@ -135,6 +155,13 @@ export function usePlayerState(dungeon: DungeonMap | null, testMode: boolean) {
         scheduleUnlock(lastRDelay + POST_EVENT_UNLOCK_MS);
         if (decision === "return") {
           const flagId = setTimeout(() => {
+            const fc = fightCountRef.current;
+            const changes: CharChange[] = CHAR_PROFILES.map(({ name, stressThreshold }) => ({
+              name,
+              stressDelta: fc >= stressThreshold ? 1 : 0,
+              moraleDelta: 1,
+            }));
+            setCharacterChanges(changes);
             isRunEndedRef.current = true;
             setIsRunEnded(true);
           }, lastRDelay + 400);
@@ -179,6 +206,7 @@ export function usePlayerState(dungeon: DungeonMap | null, testMode: boolean) {
     scrap,
     stepCount,
     isRunEnded,
+    characterChanges,
     hasReturnFlag,
     initPlayer,
     handleTurnLeft,
