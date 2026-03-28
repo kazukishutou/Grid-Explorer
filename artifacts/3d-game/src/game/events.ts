@@ -17,12 +17,13 @@ interface TeamMember {
   name: string;
   personality: Personality;
   isLeader: boolean;
+  dislikesLeader: boolean;
 }
 
 const TEAM: TeamMember[] = [
-  { name: "アレス", personality: "aggressive", isLeader: true  },
-  { name: "セイラ", personality: "cautious",   isLeader: false },
-  { name: "レン",   personality: "neutral",    isLeader: false },
+  { name: "アレス", personality: "aggressive", isLeader: true,  dislikesLeader: false },
+  { name: "セイラ", personality: "cautious",   isLeader: false, dislikesLeader: true  },
+  { name: "レン",   personality: "neutral",    isLeader: false, dislikesLeader: false },
 ];
 
 // Personality → the vote it always casts ("random" for neutral)
@@ -68,24 +69,43 @@ export function getDebateSequence(): Array<{ message: string; delay: number }> {
 
   let leaderVote: Vote | null = null;
 
-  const sequence = TEAM.map((member, i) => {
-    // Step 1: determine the vote
-    const voteKey = PERSONALITY_VOTE[member.personality];
-    const vote: Vote = voteKey === "random" ? pickRandom(VOTE_OPTIONS) : voteKey;
+  // Rebellion suffix lines shown when a member defies the leader
+  const REBELLION_LINES = [
+    "…納得できないが",
+    "本当にそれでいいのか？",
+    "あなたの判断は疑わしい",
+  ];
 
-    // Step 2: leader counts as 2 votes, others as 1
+  const sequence = TEAM.map((member, i) => {
+    // Step 1: determine base vote from personality
+    const voteKey = PERSONALITY_VOTE[member.personality];
+    let vote: Vote = voteKey === "random" ? pickRandom(VOTE_OPTIONS) : voteKey;
+
+    // Step 2: rebellion — 50% chance to defy the leader if dislikesLeader is set
+    let rebelled = false;
+    if (member.dislikesLeader && leaderVote && Math.random() < 0.5) {
+      const opposite: Vote =
+        leaderVote === "fight"  ? "escape" :
+        leaderVote === "escape" ? "fight"  :
+        pickRandom(["fight", "escape"] as Vote[]);
+      vote = opposite;
+      rebelled = true;
+    }
+
+    // Step 3: leader counts as 2 votes, others as 1
     const weight = member.isLeader ? 2 : 1;
     votes[vote] += weight;
     if (member.isLeader) leaderVote = vote;
 
-    // Step 3: pick display text that matches the same vote
+    // Step 4: pick display text matching the actual vote cast
     const opinion = pickRandom(VOTE_OPINIONS[vote]);
     const label = member.isLeader ? `${member.name}（リーダー）` : member.name;
+    const suffix = rebelled ? `　${pickRandom(REBELLION_LINES)}` : "";
 
-    console.log({ name: member.name, isLeader: member.isLeader, vote, weight, opinion });
+    console.log({ name: member.name, isLeader: member.isLeader, dislikesLeader: member.dislikesLeader, vote, weight, rebelled });
 
     return {
-      message: `${label}：「${opinion}」`,
+      message: `${label}：「${opinion}」${suffix}`,
       delay: 800 + i * 700,
     };
   });
