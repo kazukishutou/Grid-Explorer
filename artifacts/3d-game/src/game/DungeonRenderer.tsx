@@ -29,6 +29,13 @@ function isWall(dungeon: DungeonMap, x: number, y: number): boolean {
   return dungeon.grid[y][x] === 1;
 }
 
+// Draw a vertical edge unless the wall continues seamlessly in the lateral direction.
+// Lateral = cell beside the open cell along the face; diag = lateral cell shifted in the "ahead" direction.
+// Skip only when: lateral is open corridor AND diagonal is still wall (= the wall surface continues unbroken).
+function needsVert(dungeon: DungeonMap, lx: number, ly: number, dx: number, dy: number): boolean {
+  return !(!isWall(dungeon, lx, ly) && isWall(dungeon, dx, dy));
+}
+
 // Build a single merged Mesh out of all axis-aligned line-box segments.
 // Each segment: [x1,y1,z1, x2,y2,z2]. The two non-length dimensions get T thickness.
 function buildLineMesh(
@@ -126,8 +133,9 @@ function buildScene(dungeon: DungeonMap): THREE.Group {
         const fz = wz - HALF;
         segs.push([wx - HALF, WALL_HEIGHT, fz, wx + HALF, WALL_HEIGHT, fz]); // top
         segs.push([wx - HALF, 0,           fz, wx + HALF, 0,           fz]); // bottom
-        if (isWall(dungeon, x - 1, y)) segs.push([wx - HALF, 0, fz, wx - HALF, WALL_HEIGHT, fz]); // left vert
-        if (isWall(dungeon, x + 1, y)) segs.push([wx + HALF, 0, fz, wx + HALF, WALL_HEIGHT, fz]); // right vert
+        // vertical at west edge: skip only when corridor continues west AND wall also continues west
+        if (needsVert(dungeon, x - 1, y, x - 1, y - 1)) segs.push([wx - HALF, 0, fz, wx - HALF, WALL_HEIGHT, fz]);
+        if (needsVert(dungeon, x + 1, y, x + 1, y - 1)) segs.push([wx + HALF, 0, fz, wx + HALF, WALL_HEIGHT, fz]);
       }
 
       // South face  (wall at y+1)
@@ -135,8 +143,8 @@ function buildScene(dungeon: DungeonMap): THREE.Group {
         const fz = wz + HALF;
         segs.push([wx - HALF, WALL_HEIGHT, fz, wx + HALF, WALL_HEIGHT, fz]);
         segs.push([wx - HALF, 0,           fz, wx + HALF, 0,           fz]);
-        if (isWall(dungeon, x - 1, y)) segs.push([wx - HALF, 0, fz, wx - HALF, WALL_HEIGHT, fz]);
-        if (isWall(dungeon, x + 1, y)) segs.push([wx + HALF, 0, fz, wx + HALF, WALL_HEIGHT, fz]);
+        if (needsVert(dungeon, x - 1, y, x - 1, y + 1)) segs.push([wx - HALF, 0, fz, wx - HALF, WALL_HEIGHT, fz]);
+        if (needsVert(dungeon, x + 1, y, x + 1, y + 1)) segs.push([wx + HALF, 0, fz, wx + HALF, WALL_HEIGHT, fz]);
       }
 
       // East face   (wall at x+1)
@@ -144,8 +152,8 @@ function buildScene(dungeon: DungeonMap): THREE.Group {
         const fx = wx + HALF;
         segs.push([fx, WALL_HEIGHT, wz - HALF, fx, WALL_HEIGHT, wz + HALF]);
         segs.push([fx, 0,           wz - HALF, fx, 0,           wz + HALF]);
-        if (isWall(dungeon, x, y - 1)) segs.push([fx, 0, wz - HALF, fx, WALL_HEIGHT, wz - HALF]); // top-north vert
-        if (isWall(dungeon, x, y + 1)) segs.push([fx, 0, wz + HALF, fx, WALL_HEIGHT, wz + HALF]); // bottom-south vert
+        if (needsVert(dungeon, x, y - 1, x + 1, y - 1)) segs.push([fx, 0, wz - HALF, fx, WALL_HEIGHT, wz - HALF]);
+        if (needsVert(dungeon, x, y + 1, x + 1, y + 1)) segs.push([fx, 0, wz + HALF, fx, WALL_HEIGHT, wz + HALF]);
       }
 
       // West face   (wall at x-1)
@@ -153,8 +161,8 @@ function buildScene(dungeon: DungeonMap): THREE.Group {
         const fx = wx - HALF;
         segs.push([fx, WALL_HEIGHT, wz - HALF, fx, WALL_HEIGHT, wz + HALF]);
         segs.push([fx, 0,           wz - HALF, fx, 0,           wz + HALF]);
-        if (isWall(dungeon, x, y - 1)) segs.push([fx, 0, wz - HALF, fx, WALL_HEIGHT, wz - HALF]);
-        if (isWall(dungeon, x, y + 1)) segs.push([fx, 0, wz + HALF, fx, WALL_HEIGHT, wz + HALF]);
+        if (needsVert(dungeon, x, y - 1, x - 1, y - 1)) segs.push([fx, 0, wz - HALF, fx, WALL_HEIGHT, wz - HALF]);
+        if (needsVert(dungeon, x, y + 1, x - 1, y + 1)) segs.push([fx, 0, wz + HALF, fx, WALL_HEIGHT, wz + HALF]);
       }
     }
   }
