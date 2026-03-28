@@ -1,7 +1,6 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
-import { DungeonMap, PlayerState, isWall, DIR_VECTORS, Direction } from "./dungeon";
-import { makeWallTexture, makeFloorTexture, makeCeilingTexture } from "./textures";
+import { DungeonMap, PlayerState } from "./dungeon";
 
 interface Props {
   dungeon: DungeonMap;
@@ -11,6 +10,8 @@ interface Props {
 const CELL_SIZE = 2;
 const WALL_HEIGHT = 2.5;
 const STEP_DURATION = 180;
+const GREEN = 0x00dd44;
+const BLACK = 0x000000;
 
 let lastPlayerKey = "";
 let stepStart = 0;
@@ -22,92 +23,69 @@ let stepFromAngle = 0;
 let stepToAngle = 0;
 let isAnimating = false;
 
-const DIR_ANGLES = [
-  0,
-  -Math.PI / 2,
-  Math.PI,
-  Math.PI / 2,
-];
+const DIR_ANGLES = [0, -Math.PI / 2, Math.PI, Math.PI / 2];
 
 function buildScene(dungeon: DungeonMap): THREE.Group {
   const group = new THREE.Group();
 
-  const wallTex = makeWallTexture();
-  const floorTex = makeFloorTexture();
-  const ceilTex = makeCeilingTexture();
-
-  const wallMat = new THREE.MeshLambertMaterial({ map: wallTex, color: 0xaaaacc });
-  const floorMat = new THREE.MeshLambertMaterial({ map: floorTex, color: 0x8888bb });
-  const ceilMat = new THREE.MeshLambertMaterial({ map: ceilTex, color: 0x7777aa });
+  const faceMat = new THREE.MeshBasicMaterial({ color: BLACK });
+  const lineMat = new THREE.LineBasicMaterial({ color: GREEN });
 
   const wallGeo = new THREE.BoxGeometry(CELL_SIZE, WALL_HEIGHT, CELL_SIZE);
-  const floorGeo = new THREE.BoxGeometry(CELL_SIZE, 0.1, CELL_SIZE);
+  const wallEdges = new THREE.EdgesGeometry(wallGeo);
+
+  const cx = ((dungeon.width - 1) / 2) * CELL_SIZE;
+  const cz = ((dungeon.height - 1) / 2) * CELL_SIZE;
+  const pw = dungeon.width * CELL_SIZE;
+  const ph = dungeon.height * CELL_SIZE;
+
+  const floorGeo = new THREE.PlaneGeometry(pw, ph);
+  const floorEdges = new THREE.EdgesGeometry(floorGeo);
+
+  const floor = new THREE.Mesh(floorGeo, faceMat);
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.set(cx, 0, cz);
+  group.add(floor);
+  const floorLines = new THREE.LineSegments(floorEdges, lineMat);
+  floorLines.rotation.x = -Math.PI / 2;
+  floorLines.position.set(cx, 0, cz);
+  group.add(floorLines);
+
+  const ceilGeo = new THREE.PlaneGeometry(pw, ph);
+  const ceilEdges = new THREE.EdgesGeometry(ceilGeo);
+
+  const ceil = new THREE.Mesh(ceilGeo, faceMat.clone());
+  ceil.rotation.x = Math.PI / 2;
+  ceil.position.set(cx, WALL_HEIGHT, cz);
+  group.add(ceil);
+  const ceilLines = new THREE.LineSegments(ceilEdges, lineMat);
+  ceilLines.rotation.x = Math.PI / 2;
+  ceilLines.position.set(cx, WALL_HEIGHT, cz);
+  group.add(ceilLines);
 
   for (let y = 0; y < dungeon.height; y++) {
     for (let x = 0; x < dungeon.width; x++) {
+      if (dungeon.grid[y][x] !== 1) continue;
+
       const wx = x * CELL_SIZE;
       const wz = y * CELL_SIZE;
+      const wy = WALL_HEIGHT / 2;
 
-      if (dungeon.grid[y][x] === 1) {
-        const wall = new THREE.Mesh(wallGeo, wallMat);
-        wall.position.set(wx, WALL_HEIGHT / 2, wz);
-        group.add(wall);
-      } else {
-        const floor = new THREE.Mesh(floorGeo, floorMat);
-        floor.position.set(wx, -0.05, wz);
-        group.add(floor);
+      const mesh = new THREE.Mesh(wallGeo, faceMat);
+      mesh.position.set(wx, wy, wz);
+      group.add(mesh);
 
-        const ceil = new THREE.Mesh(floorGeo, ceilMat);
-        ceil.position.set(wx, WALL_HEIGHT + 0.05, wz);
-        group.add(ceil);
-      }
+      const lines = new THREE.LineSegments(wallEdges, lineMat);
+      lines.position.set(wx, wy, wz);
+      group.add(lines);
     }
   }
 
   return group;
 }
 
-function addEdgeHighlights(group: THREE.Group, dungeon: DungeonMap) {
-  const edgeMat = new THREE.MeshLambertMaterial({ color: 0x003355 });
-
-  for (let y = 0; y < dungeon.height; y++) {
-    for (let x = 0; x < dungeon.width; x++) {
-      if (dungeon.grid[y][x] !== 0) continue;
-
-      const neighbors: [number, number, number][] = [
-        [x, y - 1, 0],
-        [x + 1, y, 1],
-        [x, y + 1, 2],
-        [x - 1, y, 3],
-      ];
-
-      for (const [nx, ny, side] of neighbors) {
-        if (!isWall(dungeon, nx, ny)) continue;
-
-        const wx = x * CELL_SIZE;
-        const wz = y * CELL_SIZE;
-
-        let gx = wx, gz = wz;
-        let rw = 0.1, rd = 0.1;
-
-        if (side === 0) { gz = wz - CELL_SIZE / 2; rw = CELL_SIZE; rd = 0.1; }
-        else if (side === 1) { gx = wx + CELL_SIZE / 2; rw = 0.1; rd = CELL_SIZE; }
-        else if (side === 2) { gz = wz + CELL_SIZE / 2; rw = CELL_SIZE; rd = 0.1; }
-        else { gx = wx - CELL_SIZE / 2; rw = 0.1; rd = CELL_SIZE; }
-
-        const geo = new THREE.BoxGeometry(rw, WALL_HEIGHT, rd);
-        const mesh = new THREE.Mesh(geo, edgeMat);
-        mesh.position.set(gx, WALL_HEIGHT / 2, gz);
-        group.add(mesh);
-      }
-    }
-  }
-}
-
 export default function DungeonRenderer({ dungeon, player }: Props) {
   const mountRef = useRef<HTMLDivElement>(null);
-  const sceneRef = useRef<THREE.Scene | null>(null);
-  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const rafRef = useRef<number>(0);
   const playerRef = useRef(player);
@@ -123,34 +101,20 @@ export default function DungeonRenderer({ dungeon, player }: Props) {
     const w = mount.clientWidth;
     const h = mount.clientHeight;
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: false });
     renderer.setSize(w, h);
-    renderer.shadowMap.enabled = true;
     renderer.setPixelRatio(window.devicePixelRatio);
     mount.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x05050f);
-    scene.fog = new THREE.Fog(0x05050f, 8, 34);
-    sceneRef.current = scene;
+    scene.background = new THREE.Color(BLACK);
+    scene.fog = new THREE.Fog(BLACK, 12, 32);
 
-    const camera = new THREE.PerspectiveCamera(70, w / h, 0.1, 100);
-    cameraRef.current = camera;
-
-    const ambient = new THREE.AmbientLight(0x1a0a3a, 0.8);
-    scene.add(ambient);
-
-    const cyanFill = new THREE.HemisphereLight(0x00f0ff, 0xa020f0, 0.35);
-    scene.add(cyanFill);
-
-    const torchLight = new THREE.PointLight(0x00e0ff, 4.0, 14);
-    camera.add(torchLight);
-    torchLight.position.set(0, -0.2, 0);
+    const camera = new THREE.PerspectiveCamera(65, w / h, 0.1, 100);
     scene.add(camera);
 
     const dungeonGroup = buildScene(dungeon);
-    addEdgeHighlights(dungeonGroup, dungeon);
     scene.add(dungeonGroup);
 
     const px = dungeon.startX * CELL_SIZE;
@@ -198,10 +162,6 @@ export default function DungeonRenderer({ dungeon, player }: Props) {
         camera.rotation.y = stepFromAngle + (stepToAngle - stepFromAngle) * ease;
         if (t >= 1) isAnimating = false;
       }
-
-      const now = performance.now();
-      const flicker = 1 + Math.sin(now * 0.005) * 0.1 + Math.sin(now * 0.017) * 0.05;
-      torchLight.intensity = 4.0 * flicker;
 
       renderer.render(scene, camera);
     };
