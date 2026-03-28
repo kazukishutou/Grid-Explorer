@@ -23,35 +23,53 @@ function markVisited(visited: boolean[][], x: number, y: number): boolean[][] {
   return next;
 }
 
+// DungeonGame clears lastEvent 3000ms after each message update.
+// We add a small buffer on top so the unlock fires after the display has cleared.
+const AUTO_CLEAR_MS = 3000;
+const UNLOCK_BUFFER_MS = 200;
+
 export function usePlayerState(dungeon: DungeonMap | null) {
   const [player, setPlayer] = useState<PlayerState | null>(null);
   const [visited, setVisited] = useState<boolean[][]>([]);
   const [lastEvent, setLastEvent] = useState<GameEvent | null>(null);
 
-  // Track pending debate timers so they can be cancelled if a new event fires
-  const debateTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  // Pending timers for debate sequence (including the unlock timer)
+  const pendingTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  // Lock: true while an event sequence is still running
+  const isEventRunning = useRef(false);
 
-  const clearDebateTimers = useCallback(() => {
-    debateTimers.current.forEach(clearTimeout);
-    debateTimers.current = [];
+  const clearPendingTimers = useCallback(() => {
+    pendingTimers.current.forEach(clearTimeout);
+    pendingTimers.current = [];
+  }, []);
+
+  const scheduleUnlock = useCallback((afterMs: number) => {
+    const id = setTimeout(() => {
+      isEventRunning.current = false;
+    }, afterMs);
+    pendingTimers.current.push(id);
   }, []);
 
   const initPlayer = useCallback((d: DungeonMap) => {
-    clearDebateTimers();
+    clearPendingTimers();
+    isEventRunning.current = false;
     const v = createVisitedGrid(d.width, d.height);
     v[d.startY][d.startX] = true;
     setVisited(v);
     setLastEvent(null);
     setPlayer({ x: d.startX, y: d.startY, dir: d.startDir });
-  }, [clearDebateTimers]);
+  }, [clearPendingTimers]);
 
   const onPlayerMoved = useCallback((nx: number, ny: number, prevX: number, prevY: number) => {
     setVisited((v) => markVisited(v, nx, ny));
+
+    // Skip new events while one is still in progress
+    if (isEventRunning.current) return;
+
     if (nx !== prevX || ny !== prevY) {
       const event = checkForEvent(0.15);
       if (event) {
-        // Cancel any ongoing debate before starting a new one
-        clearDebateTimers();
+        isEventRunning.current = true;
         setLastEvent(event);
 
         if (event.type === "enemy") {
@@ -60,12 +78,18 @@ export function usePlayerState(dungeon: DungeonMap | null) {
             const id = setTimeout(() => {
               setLastEvent({ type: "debate", message });
             }, delay);
-            debateTimers.current.push(id);
+            pendingTimers.current.push(id);
           });
+          // Unlock after the last message has auto-cleared
+          const lastDelay = sequence[sequence.length - 1].delay;
+          scheduleUnlock(lastDelay + AUTO_CLEAR_MS + UNLOCK_BUFFER_MS);
+        } else {
+          // Resource event: single message, unlocks after auto-clear
+          scheduleUnlock(AUTO_CLEAR_MS + UNLOCK_BUFFER_MS);
         }
       }
     }
-  }, [clearDebateTimers]);
+  }, [scheduleUnlock]);
 
   const handleTurnLeft = useCallback(() => {
     if (!player) return;
