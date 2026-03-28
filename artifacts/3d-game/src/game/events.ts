@@ -10,11 +10,24 @@ const EVENT_MESSAGES: Record<"resource" | "enemy", string> = {
   enemy: "敵と遭遇した！",
 };
 
-const DEBATE_OPINIONS = [
-  "戦うべきだ！",
-  "危険だ、逃げよう",
-  "様子を見るべきだ",
+type Personality = "aggressive" | "cautious" | "neutral";
+
+interface TeamMember {
+  name: string;
+  personality: Personality;
+}
+
+const TEAM: TeamMember[] = [
+  { name: "アレス", personality: "aggressive" },
+  { name: "セイラ", personality: "cautious"   },
+  { name: "レン",   personality: "neutral"    },
 ];
+
+const PERSONALITY_OPINIONS: Record<Personality, string[]> = {
+  aggressive: ["戦うべきだ！", "ここで退くわけにはいかない！", "相手は弱そうだ、やれる！"],
+  cautious:   ["危険だ、逃げよう", "無理はしないほうがいい…", "今は引くべきだ"],
+  neutral:    ["戦うべきだ！", "逃げよう", "様子を見るべきだ"],
+};
 
 const DEBATE_RESULTS = ["戦闘開始", "逃走", "様子見"];
 
@@ -30,11 +43,15 @@ export function triggerEvent(type: "resource" | "enemy"): GameEvent {
 
 // Returns a sequence of {message, delay} to display after an enemy encounter.
 export function getDebateSequence(): Array<{ message: string; delay: number }> {
-  const shuffled = [...DEBATE_OPINIONS].sort(() => Math.random() - 0.5);
-  const sequence = shuffled.map((msg, i) => ({
-    message: msg,
-    delay: 800 + i * 700,
-  }));
+  // Each team member speaks once, in order, according to their personality
+  const sequence = TEAM.map((member, i) => {
+    const pool = PERSONALITY_OPINIONS[member.personality];
+    const opinion = pool[Math.floor(Math.random() * pool.length)];
+    return {
+      message: `${member.name}：「${opinion}」`,
+      delay: 800 + i * 700,
+    };
+  });
 
   const result = DEBATE_RESULTS[Math.floor(Math.random() * DEBATE_RESULTS.length)];
   const conclusionDelay = 800 + 3 * 700;
