@@ -16,12 +16,13 @@ type Vote = "fight" | "escape" | "wait";
 interface TeamMember {
   name: string;
   personality: Personality;
+  isLeader: boolean;
 }
 
 const TEAM: TeamMember[] = [
-  { name: "アレス", personality: "aggressive" },
-  { name: "セイラ", personality: "cautious"   },
-  { name: "レン",   personality: "neutral"    },
+  { name: "アレス", personality: "aggressive", isLeader: true  },
+  { name: "セイラ", personality: "cautious",   isLeader: false },
+  { name: "レン",   personality: "neutral",    isLeader: false },
 ];
 
 // Personality → the vote it always casts ("random" for neutral)
@@ -65,32 +66,40 @@ export function triggerEvent(type: "resource" | "enemy"): GameEvent {
 export function getDebateSequence(): Array<{ message: string; delay: number }> {
   const votes: Record<Vote, number> = { fight: 0, escape: 0, wait: 0 };
 
+  let leaderVote: Vote | null = null;
+
   const sequence = TEAM.map((member, i) => {
     // Step 1: determine the vote
     const voteKey = PERSONALITY_VOTE[member.personality];
     const vote: Vote = voteKey === "random" ? pickRandom(VOTE_OPTIONS) : voteKey;
 
-    // Step 2: count the vote
-    votes[vote]++;
+    // Step 2: leader counts as 2 votes, others as 1
+    const weight = member.isLeader ? 2 : 1;
+    votes[vote] += weight;
+    if (member.isLeader) leaderVote = vote;
 
-    // Step 3: pick a display text that matches the SAME vote (never independent)
+    // Step 3: pick display text that matches the same vote
     const opinion = pickRandom(VOTE_OPINIONS[vote]);
+    const label = member.isLeader ? `${member.name}（リーダー）` : member.name;
 
-    console.log({ name: member.name, personality: member.personality, vote, opinion });
+    console.log({ name: member.name, isLeader: member.isLeader, vote, weight, opinion });
 
     return {
-      message: `${member.name}：「${opinion}」`,
+      message: `${label}：「${opinion}」`,
       delay: 800 + i * 700,
     };
   });
 
   console.log("votes:", votes);
 
-  // Determine winner — most votes wins; ties broken randomly
+  // Determine winner — most votes wins; ties go to the leader's vote
   const entries = Object.entries(votes) as [Vote, number][];
   const maxCount = Math.max(...entries.map(([, n]) => n));
   const winners = entries.filter(([, n]) => n === maxCount).map(([v]) => v);
-  const winningVote = pickRandom(winners);
+  const winningVote =
+    winners.length > 1 && leaderVote && winners.includes(leaderVote)
+      ? leaderVote
+      : pickRandom(winners);
   const result = VOTE_TO_RESULT[winningVote];
 
   console.log("winning vote:", winningVote, "→ result:", result);
