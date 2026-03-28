@@ -57,6 +57,12 @@ export const VOTE_FOOD_COST: Record<string, number> = {
   wait:   1,
 };
 
+export const VOTE_SCRAP_GAIN: Record<string, number> = {
+  fight:  2,
+  escape: 0,
+  wait:   1,
+};
+
 const OUTCOME_MESSAGES: Record<string, string[]> = {
   "戦闘開始": ["戦闘に突入した！"],
   "逃走":     ["なんとか逃げ切った！", "ギリギリで離脱した…", "逃走に成功した。"],
@@ -78,11 +84,12 @@ export const VOTE_COLOR: Record<string, string> = {
   wait:   "#55ee88",
 };
 
-// Returns { sequence, foodCost } for an enemy encounter.
+// Returns { sequence, foodCost, scrapGain } for an enemy encounter.
 // testMode=true → 全員ランダム投票・全員weight=1・リーダー/反発無効・DEBUG表示
 export function getDebateSequence(testMode: boolean): {
   sequence: Array<{ message: string; color?: string; delay: number }>;
   foodCost: number;
+  scrapGain: number;
 } {
   const votes: Record<Vote, number> = { fight: 0, escape: 0, wait: 0 };
 
@@ -171,7 +178,7 @@ export function getDebateSequence(testMode: boolean): {
   const outcome = pickRandom(OUTCOME_MESSAGES[result]);
   sequence.push({ message: outcome, color: VOTE_COLOR[winningVote], delay: conclusionDelay + 900 });
 
-  return { sequence, foodCost: VOTE_FOOD_COST[winningVote] };
+  return { sequence, foodCost: VOTE_FOOD_COST[winningVote], scrapGain: VOTE_SCRAP_GAIN[winningVote] };
 }
 
 export function checkForEvent(probability = 0.15): GameEvent | null {

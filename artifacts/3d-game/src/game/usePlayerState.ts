@@ -37,6 +37,7 @@ export function usePlayerState(dungeon: DungeonMap | null, testMode: boolean) {
   const [visited, setVisited] = useState<boolean[][]>([]);
   const [eventLog, setEventLog] = useState<Array<{ message: string; color?: string }>>([]);
   const [food, setFood] = useState(FOOD_INITIAL);
+  const [scrap, setScrap] = useState(0);
   const [hasReturnFlag, setHasReturnFlag] = useState(false);
   const [stepCount, setStepCount] = useState(0);
   const [isRunEnded, setIsRunEnded] = useState(false);
@@ -72,6 +73,7 @@ export function usePlayerState(dungeon: DungeonMap | null, testMode: boolean) {
     setVisited(v);
     setEventLog([]);
     setFood(FOOD_INITIAL);
+    setScrap(0);
     setHasReturnFlag(false);
     setStepCount(0);
     setIsRunEnded(false);
@@ -96,7 +98,7 @@ export function usePlayerState(dungeon: DungeonMap | null, testMode: boolean) {
         addLog(event.message);
 
         if (event.type === "enemy") {
-          const { sequence, foodCost } = getDebateSequence(testMode);
+          const { sequence, foodCost, scrapGain } = getDebateSequence(testMode);
           sequence.forEach(({ message, color, delay }) => {
             const id = setTimeout(() => addLog(message, color), delay);
             pendingTimers.current.push(id);
@@ -108,6 +110,10 @@ export function usePlayerState(dungeon: DungeonMap | null, testMode: boolean) {
             foodRef.current = next;
             setFood(next);
             addLog(`食料を${foodCost}消費した（残り: ${next}）`, FOOD_LOG_COLOR);
+            if (scrapGain > 0) {
+              setScrap((s) => s + scrapGain);
+              addLog(`スクラップ +${scrapGain} 回収`, "#88ddff");
+            }
           }, foodDelay);
           pendingTimers.current.push(foodId);
           scheduleUnlock(lastDelay + POST_EVENT_UNLOCK_MS);
@@ -170,6 +176,7 @@ export function usePlayerState(dungeon: DungeonMap | null, testMode: boolean) {
     visited,
     eventLog,
     food,
+    scrap,
     stepCount,
     isRunEnded,
     hasReturnFlag,

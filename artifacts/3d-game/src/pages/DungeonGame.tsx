@@ -10,7 +10,7 @@ export default function DungeonGame() {
   const [phase, setPhase] = useState<GamePhase>("start");
   const [dungeon, setDungeon] = useState<DungeonMap | null>(null);
   const [testMode, setTestMode] = useState(false);
-  const { player, visited, eventLog, food, stepCount, isRunEnded, hasReturnFlag, initPlayer, handleTurnLeft, handleTurnRight, handleMoveForward, handleMoveBackward } =
+  const { player, visited, eventLog, food, scrap, stepCount, isRunEnded, hasReturnFlag, initPlayer, handleTurnLeft, handleTurnRight, handleMoveForward, handleMoveBackward } =
     usePlayerState(dungeon, testMode);
 
   const [minimapOpen, setMinimapOpen] = useState(true);
@@ -111,6 +111,9 @@ export default function DungeonGame() {
               <div style={styles.foodLabel}>
                 🍖 Food: {food}
               </div>
+              <div style={styles.scrapLabel}>
+                ⚙ Scrap: {scrap}
+              </div>
               {hasReturnFlag && (
                 <div style={styles.returnFlag}>
                   ⚠ 帰還推奨
@@ -180,6 +183,10 @@ export default function DungeonGame() {
                   <div style={styles.resultRow}>
                     <span style={styles.resultLabel}>残り食料</span>
                     <span style={styles.resultValue}>{food}</span>
+                  </div>
+                  <div style={styles.resultRow}>
+                    <span style={styles.resultLabel}>回収資源</span>
+                    <span style={{ ...styles.resultValue, color: "#88ddff" }}>{scrap}</span>
                   </div>
                 </div>
                 <div style={styles.resultDivider} />
@@ -329,6 +336,13 @@ const styles: Record<string, React.CSSProperties> = {
     letterSpacing: 1,
     fontFamily: "'Courier New', monospace",
     marginTop: 6,
+  },
+  scrapLabel: {
+    color: "#88ddff",
+    fontSize: 13,
+    letterSpacing: 1,
+    fontFamily: "'Courier New', monospace",
+    marginTop: 4,
   },
   returnFlag: {
     marginTop: 6,
