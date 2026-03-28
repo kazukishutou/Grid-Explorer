@@ -8,79 +8,158 @@ interface Props {
 }
 
 const CELL_SIZE = 2;
+const HALF = CELL_SIZE / 2;
 const WALL_HEIGHT = 2.5;
 const STEP_DURATION = 180;
+const T = 0.09; // line thickness in world units
 const GREEN = 0x00dd44;
 const BLACK = 0x000000;
 
 let lastPlayerKey = "";
 let stepStart = 0;
-let stepFromX = 0;
-let stepFromZ = 0;
-let stepToX = 0;
-let stepToZ = 0;
-let stepFromAngle = 0;
-let stepToAngle = 0;
+let stepFromX = 0, stepFromZ = 0;
+let stepToX = 0, stepToZ = 0;
+let stepFromAngle = 0, stepToAngle = 0;
 let isAnimating = false;
 
 const DIR_ANGLES = [0, -Math.PI / 2, Math.PI, Math.PI / 2];
+
+function isWall(dungeon: DungeonMap, x: number, y: number): boolean {
+  if (x < 0 || y < 0 || x >= dungeon.width || y >= dungeon.height) return true;
+  return dungeon.grid[y][x] === 1;
+}
+
+// Build a single merged Mesh out of all axis-aligned line-box segments.
+// Each segment: [x1,y1,z1, x2,y2,z2]. The two non-length dimensions get T thickness.
+function buildLineMesh(
+  segments: Array<[number, number, number, number, number, number]>,
+  mat: THREE.MeshBasicMaterial
+): THREE.Mesh {
+  const positions: number[] = [];
+  const indices: number[] = [];
+  let base = 0;
+
+  for (const [x1, y1, z1, x2, y2, z2] of segments) {
+    let xMin = Math.min(x1, x2), xMax = Math.max(x1, x2);
+    let yMin = Math.min(y1, y2), yMax = Math.max(y1, y2);
+    let zMin = Math.min(z1, z2), zMax = Math.max(z1, z2);
+    if (xMin === xMax) { xMin -= T / 2; xMax += T / 2; }
+    if (yMin === yMax) { yMin -= T / 2; yMax += T / 2; }
+    if (zMin === zMax) { zMin -= T / 2; zMax += T / 2; }
+
+    // 8 corners of the box
+    positions.push(
+      xMin, yMin, zMin, // 0
+      xMax, yMin, zMin, // 1
+      xMax, yMax, zMin, // 2
+      xMin, yMax, zMin, // 3
+      xMin, yMin, zMax, // 4
+      xMax, yMin, zMax, // 5
+      xMax, yMax, zMax, // 6
+      xMin, yMax, zMax, // 7
+    );
+    const o = base;
+    indices.push(
+      o+0, o+2, o+1,  o+0, o+3, o+2, // -z face
+      o+4, o+5, o+6,  o+4, o+6, o+7, // +z face
+      o+0, o+1, o+5,  o+0, o+5, o+4, // -y face
+      o+2, o+6, o+5,  o+2, o+5, o+1, // +x face
+      o+3, o+7, o+6,  o+3, o+6, o+2, // +y face
+      o+0, o+4, o+7,  o+0, o+7, o+3, // -x face
+    );
+    base += 8;
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geo.setIndex(indices);
+  return new THREE.Mesh(geo, mat);
+}
 
 function buildScene(dungeon: DungeonMap): THREE.Group {
   const group = new THREE.Group();
 
   const faceMat = new THREE.MeshBasicMaterial({ color: BLACK });
-  const lineMat = new THREE.LineBasicMaterial({ color: GREEN });
+  const lineMat = new THREE.MeshBasicMaterial({ color: GREEN });
 
+  // --- Black occluder boxes for every wall cell ---
   const wallGeo = new THREE.BoxGeometry(CELL_SIZE, WALL_HEIGHT, CELL_SIZE);
-  const wallEdges = new THREE.EdgesGeometry(wallGeo);
+  for (let y = 0; y < dungeon.height; y++) {
+    for (let x = 0; x < dungeon.width; x++) {
+      if (!isWall(dungeon, x, y)) continue;
+      const mesh = new THREE.Mesh(wallGeo, faceMat);
+      mesh.position.set(x * CELL_SIZE, WALL_HEIGHT / 2, y * CELL_SIZE);
+      group.add(mesh);
+    }
+  }
 
+  // --- Black floor & ceiling planes (occlude geometry below/above) ---
   const cx = ((dungeon.width - 1) / 2) * CELL_SIZE;
   const cz = ((dungeon.height - 1) / 2) * CELL_SIZE;
   const pw = dungeon.width * CELL_SIZE;
   const ph = dungeon.height * CELL_SIZE;
-
-  const floorGeo = new THREE.PlaneGeometry(pw, ph);
-  const floorEdges = new THREE.EdgesGeometry(floorGeo);
-
-  const floor = new THREE.Mesh(floorGeo, faceMat);
+  const planeMat = faceMat;
+  const planeGeo = new THREE.PlaneGeometry(pw, ph);
+  const floor = new THREE.Mesh(planeGeo, planeMat);
   floor.rotation.x = -Math.PI / 2;
   floor.position.set(cx, 0, cz);
   group.add(floor);
-  const floorLines = new THREE.LineSegments(floorEdges, lineMat);
-  floorLines.rotation.x = -Math.PI / 2;
-  floorLines.position.set(cx, 0, cz);
-  group.add(floorLines);
-
-  const ceilGeo = new THREE.PlaneGeometry(pw, ph);
-  const ceilEdges = new THREE.EdgesGeometry(ceilGeo);
-
-  const ceil = new THREE.Mesh(ceilGeo, faceMat.clone());
+  const ceil = new THREE.Mesh(planeGeo.clone(), planeMat);
   ceil.rotation.x = Math.PI / 2;
   ceil.position.set(cx, WALL_HEIGHT, cz);
   group.add(ceil);
-  const ceilLines = new THREE.LineSegments(ceilEdges, lineMat);
-  ceilLines.rotation.x = Math.PI / 2;
-  ceilLines.position.set(cx, WALL_HEIGHT, cz);
-  group.add(ceilLines);
+
+  // --- Green edge lines ---
+  // Walk every open cell; for each of its 4 sides that borders a wall cell,
+  // draw: top horizontal, bottom horizontal, and vertical edges ONLY where
+  // the corridor does not continue laterally (= corner / dead end).
+  const segs: Array<[number, number, number, number, number, number]> = [];
 
   for (let y = 0; y < dungeon.height; y++) {
     for (let x = 0; x < dungeon.width; x++) {
-      if (dungeon.grid[y][x] !== 1) continue;
-
+      if (isWall(dungeon, x, y)) continue;
       const wx = x * CELL_SIZE;
       const wz = y * CELL_SIZE;
-      const wy = WALL_HEIGHT / 2;
 
-      const mesh = new THREE.Mesh(wallGeo, faceMat);
-      mesh.position.set(wx, wy, wz);
-      group.add(mesh);
+      // North face  (wall at y-1)
+      if (isWall(dungeon, x, y - 1)) {
+        const fz = wz - HALF;
+        segs.push([wx - HALF, WALL_HEIGHT, fz, wx + HALF, WALL_HEIGHT, fz]); // top
+        segs.push([wx - HALF, 0,           fz, wx + HALF, 0,           fz]); // bottom
+        if (isWall(dungeon, x - 1, y)) segs.push([wx - HALF, 0, fz, wx - HALF, WALL_HEIGHT, fz]); // left vert
+        if (isWall(dungeon, x + 1, y)) segs.push([wx + HALF, 0, fz, wx + HALF, WALL_HEIGHT, fz]); // right vert
+      }
 
-      const lines = new THREE.LineSegments(wallEdges, lineMat);
-      lines.position.set(wx, wy, wz);
-      group.add(lines);
+      // South face  (wall at y+1)
+      if (isWall(dungeon, x, y + 1)) {
+        const fz = wz + HALF;
+        segs.push([wx - HALF, WALL_HEIGHT, fz, wx + HALF, WALL_HEIGHT, fz]);
+        segs.push([wx - HALF, 0,           fz, wx + HALF, 0,           fz]);
+        if (isWall(dungeon, x - 1, y)) segs.push([wx - HALF, 0, fz, wx - HALF, WALL_HEIGHT, fz]);
+        if (isWall(dungeon, x + 1, y)) segs.push([wx + HALF, 0, fz, wx + HALF, WALL_HEIGHT, fz]);
+      }
+
+      // East face   (wall at x+1)
+      if (isWall(dungeon, x + 1, y)) {
+        const fx = wx + HALF;
+        segs.push([fx, WALL_HEIGHT, wz - HALF, fx, WALL_HEIGHT, wz + HALF]);
+        segs.push([fx, 0,           wz - HALF, fx, 0,           wz + HALF]);
+        if (isWall(dungeon, x, y - 1)) segs.push([fx, 0, wz - HALF, fx, WALL_HEIGHT, wz - HALF]); // top-north vert
+        if (isWall(dungeon, x, y + 1)) segs.push([fx, 0, wz + HALF, fx, WALL_HEIGHT, wz + HALF]); // bottom-south vert
+      }
+
+      // West face   (wall at x-1)
+      if (isWall(dungeon, x - 1, y)) {
+        const fx = wx - HALF;
+        segs.push([fx, WALL_HEIGHT, wz - HALF, fx, WALL_HEIGHT, wz + HALF]);
+        segs.push([fx, 0,           wz - HALF, fx, 0,           wz + HALF]);
+        if (isWall(dungeon, x, y - 1)) segs.push([fx, 0, wz - HALF, fx, WALL_HEIGHT, wz - HALF]);
+        if (isWall(dungeon, x, y + 1)) segs.push([fx, 0, wz + HALF, fx, WALL_HEIGHT, wz + HALF]);
+      }
     }
   }
 
+  group.add(buildLineMesh(segs, lineMat));
   return group;
 }
 
@@ -90,9 +169,7 @@ export default function DungeonRenderer({ dungeon, player }: Props) {
   const rafRef = useRef<number>(0);
   const playerRef = useRef(player);
 
-  useEffect(() => {
-    playerRef.current = player;
-  }, [player]);
+  useEffect(() => { playerRef.current = player; }, [player]);
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -101,7 +178,7 @@ export default function DungeonRenderer({ dungeon, player }: Props) {
     const w = mount.clientWidth;
     const h = mount.clientHeight;
 
-    const renderer = new THREE.WebGLRenderer({ antialias: false });
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(w, h);
     renderer.setPixelRatio(window.devicePixelRatio);
     mount.appendChild(renderer.domElement);
@@ -114,8 +191,7 @@ export default function DungeonRenderer({ dungeon, player }: Props) {
     const camera = new THREE.PerspectiveCamera(65, w / h, 0.1, 100);
     scene.add(camera);
 
-    const dungeonGroup = buildScene(dungeon);
-    scene.add(dungeonGroup);
+    scene.add(buildScene(dungeon));
 
     const px = dungeon.startX * CELL_SIZE;
     const pz = dungeon.startY * CELL_SIZE;
@@ -130,7 +206,6 @@ export default function DungeonRenderer({ dungeon, player }: Props) {
 
     const animate = () => {
       rafRef.current = requestAnimationFrame(animate);
-
       const p = playerRef.current;
       const key = `${p.x},${p.y},${p.dir}`;
       if (key !== lastPlayerKey) {
@@ -142,7 +217,7 @@ export default function DungeonRenderer({ dungeon, player }: Props) {
         stepToZ = tz;
 
         let fromA = camera.rotation.y % (2 * Math.PI);
-        let toA = DIR_ANGLES[p.dir];
+        const toA = DIR_ANGLES[p.dir];
         let diff = toA - fromA;
         if (diff > Math.PI) diff -= 2 * Math.PI;
         if (diff < -Math.PI) diff += 2 * Math.PI;
