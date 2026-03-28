@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { generateDungeon, DungeonMap } from "../game/dungeon";
 import { usePlayerState } from "../game/usePlayerState";
-import WireframeView from "../game/WireframeView";
+import DungeonRenderer from "../game/DungeonRenderer";
 import Minimap from "../game/Minimap";
 
 type GamePhase = "start" | "playing";
@@ -93,7 +93,7 @@ export default function DungeonGame() {
       {dungeon && player && (
         <>
           <div style={styles.viewport}>
-            <WireframeView dungeon={dungeon} player={player} />
+            <DungeonRenderer dungeon={dungeon} player={player} />
             <div style={styles.overlay}>
               <div style={styles.crosshair} />
             </div>
