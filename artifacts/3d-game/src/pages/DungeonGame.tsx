@@ -27,7 +27,7 @@ export default function DungeonGame() {
   const [dungeon, setDungeon] = useState<DungeonMap | null>(null);
   const [testMode, setTestMode] = useState(false);
   const [minimapOpen, setMinimapOpen] = useState(true);
-  const [appMode, setAppMode] = useState<AppMode>("dungeon");
+  const [appMode, setAppMode] = useState<AppMode>("commune");
   const [charStats, setCharStats] = useState<CharStat[]>(INITIAL_CHAR_STATS);
 
   // Derived: selected team members mapped to their full TeamMember definition
