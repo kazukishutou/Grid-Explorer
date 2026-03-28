@@ -10,7 +10,7 @@ const EVENT_MESSAGES: Record<"resource" | "enemy", string> = {
   enemy: "敵と遭遇した！",
 };
 
-type Personality = "aggressive" | "cautious" | "neutral" | "chaotic";
+type Personality = "aggressive" | "cautious" | "neutral";
 type Vote = "fight" | "escape" | "wait";
 
 interface TeamMember {
@@ -24,25 +24,14 @@ const TEAM: TeamMember[] = [
   { name: "アレス", personality: "aggressive", isLeader: true,  dislikesLeader: false },
   { name: "セイラ", personality: "cautious",   isLeader: false, dislikesLeader: true  },
   { name: "レン",   personality: "neutral",    isLeader: false, dislikesLeader: false },
-  { name: "カイ",   personality: "chaotic",    isLeader: false, dislikesLeader: false },
 ];
 
-// Personality → the vote it always casts ("random" for neutral/chaotic)
+// Personality → the vote it always casts ("random" for neutral)
 const PERSONALITY_VOTE: Record<Personality, Vote | "random"> = {
   aggressive: "fight",
   cautious:   "escape",
   neutral:    "random",
-  chaotic:    "random",
 };
-
-// Chaotic-specific opinions (vote-agnostic — displayed regardless of actual vote)
-const CHAOTIC_OPINIONS = [
-  "どっちでもいい",
-  "勘で決める",
-  "面白そうな方で",
-  "なんとかなるでしょ",
-  "直感に従う",
-];
 
 const VOTE_OPTIONS: Vote[] = ["fight", "escape", "wait"];
 
@@ -108,10 +97,8 @@ export function getDebateSequence(): Array<{ message: string; delay: number }> {
     votes[vote] += weight;
     if (member.isLeader) leaderVote = vote;
 
-    // Step 4: pick display text — chaotic uses their own pool regardless of vote
-    const opinion = member.personality === "chaotic"
-      ? pickRandom(CHAOTIC_OPINIONS)
-      : pickRandom(VOTE_OPINIONS[vote]);
+    // Step 4: pick display text matching the actual vote cast
+    const opinion = pickRandom(VOTE_OPINIONS[vote]);
     const label = member.isLeader ? `${member.name}（リーダー）` : member.name;
     const suffix = rebelled ? `　${pickRandom(REBELLION_LINES)}` : "";
 
